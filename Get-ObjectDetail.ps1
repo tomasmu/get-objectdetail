@@ -1,6 +1,7 @@
 ﻿#by: tomasmu
 #date: 2019-01-05
 
+#some helper functions..
 function IsEnumerable {
     [CmdletBinding()]
     param($InputObject)
@@ -60,6 +61,7 @@ function WriteObject {
     $output
 }
 
+#the function that does it all
 function ObjDetail {
     [CmdletBinding()]
     param(
@@ -75,30 +77,29 @@ function ObjDetail {
     Write-Verbose "$cmdName, $($PSBoundParameters.GetEnumerator() | % { "$($_.Key)='$($_.Value)'" })"
 
     if ($Level -gt $MaxDepth) {
-        #Write-Error "MaxDepth exceeded: $Level"
+        #Write-Verbose "$cmdName, MaxDepth $MaxDepth exceeded: $Name"
+        #WriteObject -Name $Name -InputObject $obj -CustomValue '(MaxDepth)'
         continue
     }
 
     $obj = $InputObject
     if ($null -eq $obj) {
-        Write-Verbose "$cmdName, $Name is null"
+        Write-Verbose "$cmdName, null: $Name"
         WriteObject -Name $Name -InputObject $obj
     }
     else {
         if (-not (IsSimple -InputObject $obj)) {
             $hashCode = $obj.GetHashCode()
-            $isZeroHash = $hashCode -eq 0 #include anyway, maybe?
+            $isZeroHash = $hashCode -eq 0 #include anyway, probably an "error" (e.g. empty guid, [timespan]0, etc)
             #$isPSCustomObjectGetHashCodeBug = $obj -is [System.Management.Automation.PSCustomObject] #include anyway, because of duplicate hashcodes?
             $isUnique = $HashCodes.Add($hashCode) -or $isZeroHash #-or $isPSCustomObjectGetHashCodeBug
-
             if ($isUnique) {
-                #print complex object without value, properties will be shown later (is this a good idea?)
-                WriteObject -Name $Name -InputObject $obj -CustomValue "(...)"
+                #print complex object without value, properties will be shown later
+                WriteObject -Name $Name -InputObject $obj -CustomValue '(...)'
             }
             else {
-                #print object as duplicate:
-                WriteObject -Name $Name -InputObject $obj -CustomValue "(Duplicate)"
-                #Write-Error "Duplicate hashcode detected: $Name = $hashCode"
+                #Write-Verbose "Duplicate hashcode detected: $Name = $hashCode"
+                WriteObject -Name $Name -InputObject $obj -CustomValue '(Duplicate)'
                 continue
             }
         }
@@ -106,7 +107,7 @@ function ObjDetail {
             WriteObject -Name $Name -InputObject $obj
         }
 
-        $ObjDetailParam = @{
+        $objDetailParam = @{
              Level           = $Level + 1
              MaxDepth        = $MaxDepth
              HashCodes       = $HashCodes
@@ -114,50 +115,48 @@ function ObjDetail {
         }
 
         if (IsDictionary -InputObject $obj) {
-            #print with key: $obj['key']
-            Write-Verbose "$cmdName, IsDictionary"
+            Write-Verbose "$cmdName, IsDictionary: $Name"
             foreach ($keyValue in $obj.GetEnumerator()) {
                 $key = $keyValue.Key
                 $value = $keyValue.Value
-                ObjDetail -InputObject $value -Name "$Name['$key']" @ObjDetailParam
+                ObjDetail -InputObject $value -Name "$Name['$key']" @objDetailParam
             }
         }
         elseif (IsEnumerable -InputObject $obj) {
             if (IsIndexable -InputObject $obj) {
-                #print with integer index: $obj[index]
-                Write-Verbose "$cmdName, IsEnumerable IsIndexable"
+                Write-Verbose "$cmdName, IsEnumerable IsIndexable: $Name"
                 for ($index = 0; $index -lt $obj.Count; $index++) {
                     $value = $obj[$index]
-                    ObjDetail -InputObject $value -Name "$Name[$index]" @ObjDetailParam
+                    ObjDetail -InputObject $value -Name "$Name[$index]" @objDetailParam
                 }
             }
             else {
-                #print non-indexable collection (numbered): $obj (#n)
-                #$obj (#n) = ($obj | select -Index n)
-                Write-Verbose "$cmdName, IsEnumerable Not Indexable"
+                #print non-indexable collection with pseudo-index: $obj (N)
+                #$obj (N) can be retrieved with ($obj | select -Index N)
+                Write-Verbose "$cmdName, IsEnumerable Not Indexable: $Name"
                 $count = -1
                 foreach ($value in $obj) {
                     $count++
-                    ObjDetail -InputObject $value -Name "$Name ($count)" @ObjDetailParam
+                    ObjDetail -InputObject $value -Name "$Name ($count)" @objDetailParam
                 }
             }
         }
 
-        #always print properties: $obj.prop
         foreach ($prop in $obj.psobject.Properties) {
             $property = $prop.Name
             $value = $prop.Value
             if ($property -notin $ExcludeProperty) {
-                ObjDetail -InputObject $value -Name "$Name.$property" @ObjDetailParam
+                ObjDetail -InputObject $value -Name "$Name.$property" @objDetailParam
             }
             #else {
-            #    #Write-Verbose "$cmdName, $Name is an ExcludedProperty"
-            #    #WriteObject -Name "$Name.$property" -InputObject $value -CustomValue "(ExcludedProperty)"
+            #    #Write-Verbose "$cmdName, ExcludedProperty: $Name"
+            #    #WriteObject -Name "$Name.$property" -InputObject $value -CustomValue '(ExcludedProperty)'
             #}
         }
     }
 }
 
+#will be the only exposed function when this is a module
 function Get-ObjectDetail {
     [CmdletBinding()]
     param(
@@ -168,7 +167,7 @@ function Get-ObjectDetail {
     )
 
     begin {
-        $ObjDetailParam = @{
+        $objDetailParam = @{
             Name            = $Name
             Level           = 0
             MaxDepth        = $MaxDepth
@@ -177,7 +176,7 @@ function Get-ObjectDetail {
         }
     }
     process {
-        ObjDetail -InputObject $InputObject @ObjDetailParam
+        ObjDetail -InputObject $InputObject @objDetailParam
     }
     end {}
 }

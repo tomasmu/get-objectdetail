@@ -87,7 +87,10 @@ function ObjDetail {
 
     if ($Level -gt $MaxDepth) {
         Write-Verbose "$cmdName, MaxDepth $MaxDepth exceeded: $Name"
-        #WriteObject -Name $Name -InputObject $obj -CustomValue '(MaxDepth)'
+        if ($DebugPreference) {
+            WriteObject -Name $Name -InputObject $obj -CustomValue '(MaxDepth)'
+        }
+
         continue
     }
 
@@ -95,12 +98,16 @@ function ObjDetail {
     if ($null -eq $obj) {
         Write-Verbose "$cmdName, null: $Name"
         WriteObject -Name $Name -InputObject $obj
+
         continue
     }
 
     if (IsIgnored -InputObject $obj) {
         Write-Verbose "$cmdName, ignored: $Name"
-        WriteObject -Name $Name -InputObject $obj -CustomValue "(Ignored)"
+        if ($DebugPreference) {
+            WriteObject -Name $Name -InputObject $obj -CustomValue "(Ignored)"
+        }
+
         continue
     }
 
@@ -116,6 +123,7 @@ function ObjDetail {
         else {
             #Write-Verbose "Duplicate hashcode detected: $Name = $hashCode"
             WriteObject -Name $Name -InputObject $obj -CustomValue '(Duplicate)'
+
             continue
         }
     }
@@ -168,10 +176,12 @@ function ObjDetail {
         if ($property -notin $ExcludeProperty) {
             ObjDetail -InputObject $value -Name "$Name.$property" @objDetailParam
         }
-        #else {
-        #    #Write-Verbose "$cmdName, ExcludedProperty: $Name"
-        #    #WriteObject -Name "$Name.$property" -InputObject $value -CustomValue '(ExcludedProperty)'
-        #}
+        else {
+            #Write-Verbose "$cmdName, ExcludedProperty: $Name"
+            if ($DebugPreference) {
+                WriteObject -Name "$Name.$property" -InputObject $value -CustomValue '(ExcludedProperty)'
+            }
+        }
     }
 }
 

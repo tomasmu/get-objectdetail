@@ -5,7 +5,7 @@
 #Remove-Module GetObjectDetail
 #Import-Module GetObjectDetail
 
-#helper function to make test arrays to compare output with
+#helper function for output comparison and creating test arrays
 function ConvertToCsvRow {
     param(
         [parameter(ValueFromPipeline = $true)]$InputObject,

@@ -156,7 +156,7 @@ Describe 'Get-ObjectDetail' {
         It 'Returns expected object' {
             $object = 42
             $expected = @(
-                '"$obj","42","Int32"'
+                '"$x","42","Int32"'
             )
 
             Get-ObjectDetail -InputObject $object | ConvertToCsvRow | Should Be $expected
@@ -167,8 +167,8 @@ Describe 'Get-ObjectDetail' {
         It 'Returns expected object and properties' {
             $object = "this sentence has thirtynine characters"
             $expected = @(
-                '"$obj","this sentence has thirtynine characters","String"'
-                '"$obj.Length","39","Int32"'
+                '"$x","this sentence has thirtynine characters","String"'
+                '"$x.Length","39","Int32"'
             )
 
             Get-ObjectDetail -InputObject $object | ConvertToCsvRow | Should Be $expected
@@ -179,9 +179,9 @@ Describe 'Get-ObjectDetail' {
         It 'Shows (...) as object value since its content will be expanded later' {
             $object = Get-Date
             $expected = @(
-                '"$obj","(...)","Guid"'
-                '"$obj.Guid","0cc4af99-edbc-4813-8106-22971f5f7e75","String"'
-                '"$obj.Guid.Length","36","Int32"'
+                '"$x","(...)","Guid"'
+                '"$x.Guid","0cc4af99-edbc-4813-8106-22971f5f7e75","String"'
+                '"$x.Guid.Length","36","Int32"'
             )
         }
     }
@@ -197,11 +197,11 @@ Describe 'Get-ObjectDetail' {
                 NotDuplicate2 = $notDuplicate
             }
             $expected = @(
-                '"$obj","(...)","PSCustomObject"'
-                '"$obj.Duplicate1","(...)","Hashtable"'
-                '"$obj.Duplicate2","(Duplicate)","Hashtable"'
-                '"$obj.NotDuplicate1","42","Int32"'
-                '"$obj.NotDuplicate2","42","Int32"'
+                '"$x","(...)","PSCustomObject"'
+                '"$x.Duplicate1","(...)","Hashtable"'
+                '"$x.Duplicate2","(Duplicate)","Hashtable"'
+                '"$x.NotDuplicate1","42","Int32"'
+                '"$x.NotDuplicate2","42","Int32"'
             )
 
             Get-ObjectDetail -InputObject $object -MaxDepth 1 | ConvertToCsvRow | Should Be $expected
@@ -212,17 +212,17 @@ Describe 'Get-ObjectDetail' {
         It 'Returns expected object' {
             $object = [int[]](12, 34)
             $expected = @(
-                '"$obj","(...)","Int32[]"'
-                '"$obj[0]","12","Int32"'
-                '"$obj[1]","34","Int32"'
-                '"$obj.Count","2","Int32"'
-                '"$obj.Length","2","Int32"'
-                '"$obj.LongLength","2","Int64"'
-                '"$obj.Rank","1","Int32"'
-                '"$obj.SyncRoot","(Duplicate)","Int32[]"'
-                '"$obj.IsReadOnly","False","Boolean"'
-                '"$obj.IsFixedSize","True","Boolean"'
-                '"$obj.IsSynchronized","False","Boolean"'
+                '"$x","(...)","Int32[]"'
+                '"$x[0]","12","Int32"'
+                '"$x[1]","34","Int32"'
+                '"$x.Count","2","Int32"'
+                '"$x.Length","2","Int32"'
+                '"$x.LongLength","2","Int64"'
+                '"$x.Rank","1","Int32"'
+                '"$x.SyncRoot","(Duplicate)","Int32[]"'
+                '"$x.IsReadOnly","False","Boolean"'
+                '"$x.IsFixedSize","True","Boolean"'
+                '"$x.IsSynchronized","False","Boolean"'
             )
 
             Get-ObjectDetail -InputObject $object | ConvertToCsvRow | Should Be $expected

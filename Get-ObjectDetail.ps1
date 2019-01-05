@@ -162,7 +162,7 @@ function Get-ObjectDetail {
     [CmdletBinding()]
     param(
         [parameter(ValueFromPipeline = $true)]$InputObject,
-        [string]$Name = '$obj',
+        [string]$Name = '$x',
         [int]$MaxDepth = 10,
         [string[]]$ExcludeProperty
     )

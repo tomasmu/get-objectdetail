@@ -44,7 +44,7 @@ function IsSimple {
 function IsIgnored {
     [CmdletBinding()]
     param($InputObject)
-
+    
     $null -ne $InputObject -and
     $InputObject.GetType().Name -match '^Runtime' #reflection can really get out of hand
 }

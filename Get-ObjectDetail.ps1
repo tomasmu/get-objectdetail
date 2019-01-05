@@ -55,7 +55,7 @@ function WriteObject {
         Name  = $Name
         Value = $value
         Type  = $type
-        #Level = $Level
+        #Level = $Level #visible from outer function(!)
     }
 
     $output

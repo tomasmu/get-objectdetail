@@ -138,7 +138,7 @@ Describe 'WriteObject' {
     }
 
     Context 'Given an object and custom value' {
-        It 'Outputs the properties we want' {
+        It 'Outputs the custom value' {
             $object = @(12, 34)
             $expected = [PSCustomObject]@{
                 Name = "name"
@@ -152,6 +152,7 @@ Describe 'WriteObject' {
 }
 
 Describe 'Get-ObjectDetail' {
+    #todo: test columns separately with | select Col to make tests less brittle?
     Context 'Given int' {
         It 'Returns expected object' {
             $object = 42
@@ -175,36 +176,14 @@ Describe 'Get-ObjectDetail' {
         }
     }
 
-    Context 'Given complex object (guid)' {
+    Context 'Given complex object (date)' {
         It 'Shows (...) as object value since its content will be expanded later' {
             $object = Get-Date
             $expected = @(
-                '"$x","(...)","Guid"'
-                '"$x.Guid","0cc4af99-edbc-4813-8106-22971f5f7e75","String"'
-                '"$x.Guid.Length","36","Int32"'
-            )
-        }
-    }
-
-    Context 'Given object with duplicates' {
-        It 'Marks duplicate complex types as (Duplicate)' {
-            $duplicate = [PSObject]@{ Double = 6.283185 }
-            $notDuplicate = 42
-            $object = [PSCustomObject]@{
-                Duplicate1 = $duplicate
-                Duplicate2 = $duplicate
-                NotDuplicate1 = $notDuplicate
-                NotDuplicate2 = $notDuplicate
-            }
-            $expected = @(
-                '"$x","(...)","PSCustomObject"'
-                '"$x.Duplicate1","(...)","Hashtable"'
-                '"$x.Duplicate2","(Duplicate)","Hashtable"'
-                '"$x.NotDuplicate1","42","Int32"'
-                '"$x.NotDuplicate2","42","Int32"'
+                '"$x","(...)","DateTime"'
             )
 
-            Get-ObjectDetail -InputObject $object -MaxDepth 1 | ConvertToCsvRow | Should Be $expected
+            Get-ObjectDetail -InputObject $object -MaxDepth 0 | ConvertToCsvRow | Should Be $expected
         }
     }
 
@@ -226,6 +205,28 @@ Describe 'Get-ObjectDetail' {
             )
 
             Get-ObjectDetail -InputObject $object | ConvertToCsvRow | Should Be $expected
+        }
+    }
+
+    Context 'Given object with duplicates' {
+        It 'Marks duplicate complex types as (Duplicate), but not duplicate value types' {
+            $duplicate = [PSObject]@{ Double = 6.283185 }
+            $notDuplicate = 42
+            $object = [PSCustomObject]@{
+                Duplicate1 = $duplicate
+                Duplicate2 = $duplicate
+                NotDuplicate1 = $notDuplicate
+                NotDuplicate2 = $notDuplicate
+            }
+            $expected = @(
+                '"$x","(...)","PSCustomObject"'
+                '"$x.Duplicate1","(...)","Hashtable"'
+                '"$x.Duplicate2","(Duplicate)","Hashtable"'
+                '"$x.NotDuplicate1","42","Int32"'
+                '"$x.NotDuplicate2","42","Int32"'
+            )
+
+            Get-ObjectDetail -InputObject $object -MaxDepth 1 | ConvertToCsvRow | Should Be $expected
         }
     }
 }

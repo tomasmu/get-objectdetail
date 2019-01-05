@@ -17,6 +17,18 @@ function IsDictionary {
     $InputObject -is [System.Collections.IDictionary]
 }
 
+function IsIndexable {
+    [CmdletBinding()]
+    param($InputObject)
+
+    #$obj and $obj[0] are apparently equal in powershell if $obj is an unindexable datatype
+
+    $null -ne $InputObject -and
+    $null -ne $InputObject[0] -and  #breaks if array has $null element in [0] though :(
+    $InputObject[0].GetHashCode() -ne $InputObject.GetHashCode()
+}
+
+#kind of "is value type", ie printable
 function IsSimple {
     [CmdletBinding()]
     param($InputObject)
@@ -27,17 +39,6 @@ function IsSimple {
     $InputObject -is [enum]        #treat [enum] as a value, like [int]
 
     #$InputObject.GetType().IsValueType #example: [date] is valuetype :(
-}
-
-function IsIndexable {
-    [CmdletBinding()]
-    param($InputObject)
-
-    #$obj and $obj[0] are apparently equal in powershell if $obj is an unindexable datatype
-
-    $null -ne $InputObject -and
-    $null -ne $InputObject[0] -and  #breaks if array has $null element in [0] though :(
-    $InputObject[0].GetHashCode() -ne $InputObject.GetHashCode()
 }
 
 function IsIgnored {
@@ -96,7 +97,7 @@ function ObjDetail {
 
     $obj = $InputObject
     if ($null -eq $obj) {
-        Write-Verbose "$cmdName, null: $Name"
+        #Write-Verbose "$cmdName, null: $Name"
         WriteObject -Name $Name -InputObject $obj
 
         continue

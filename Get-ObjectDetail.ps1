@@ -28,7 +28,7 @@ function IsIndexable {
     $InputObject[0].GetHashCode() -ne $InputObject.GetHashCode()
 }
 
-#kind of "is value type", ie printable
+#kind of "is value type"
 function IsSimple {
     [CmdletBinding()]
     param($InputObject)
@@ -36,7 +36,7 @@ function IsSimple {
     $null -eq $InputObject -or
     $InputObject.GetType().IsPrimitive -or
     $InputObject -is [string] -or  #treat [string] as a value
-    $InputObject -is [enum]        #treat [enum] as a value, like [int]
+    $InputObject -is [enum]        #treat [enum] as a value
 
     #$InputObject.GetType().IsValueType #example: [date] is valuetype :(
 }
@@ -47,6 +47,32 @@ function IsIgnored {
     
     $null -ne $InputObject -and
     $InputObject.GetType().Name -match '^Runtime' #reflection can really get out of hand
+}
+
+#determine if string ends with a property cycle repeated $Count times, to avoid infinitely recursive types
+#i cannot always find duplicates with GetHashCode(), it returns random values on certain types
+#slightly bad workaround so it's not in use yet, there has to be a better way!
+function EndsWithPropertyCycle {
+    [CmdletBinding()]
+    param(
+        [string]$Text,
+        [ValidateRange(2, [int]::MaxValue)]
+        [int]$Count = 2
+    )
+
+    $cyclePattern = "((\.[^.]+)+)\1{$($Count - 1)}$"
+
+    $match = ([regex]$cyclePattern).Match($Text)
+    if ($match.Success) {
+        $full = $match.Groups[0].Value
+        $cycle = $match.Groups[1].Value
+        $repeats = [math]::Floor($full.Length / $cycle.Length)
+        Write-Verbose "'$Text' -> full '$full' cycle '$cycle' repeats $repeats"
+        $true
+    }
+    else {
+        $false
+    }
 }
 
 function WriteObject {
@@ -64,8 +90,11 @@ function WriteObject {
         Name  = $Name
         Value = $value
         Type  = $type
-        #Level = $Level #visible from outer function(!)
-        #Hash = if ($null -ne $InputObject) { $InputObject.GetHashCode() } else { 'null' }
+    }
+
+    if ($DebugPreference) {
+        #$output | Add-Member @{ Level = $Level } #visible from outer function(!)
+        $output | Add-Member @{ Hash = if ($null -ne $InputObject) { $InputObject.GetHashCode() } else { 'null' } }
     }
 
     $output
@@ -92,7 +121,7 @@ function ObjDetail {
             WriteObject -Name $Name -InputObject $obj -CustomValue '(MaxDepth)'
         }
 
-        continue
+        return
     }
 
     $obj = $InputObject
@@ -100,7 +129,7 @@ function ObjDetail {
         #Write-Verbose "$cmdName, null: $Name"
         WriteObject -Name $Name -InputObject $obj
 
-        continue
+        return
     }
 
     if (IsIgnored -InputObject $obj) {
@@ -109,14 +138,17 @@ function ObjDetail {
             WriteObject -Name $Name -InputObject $obj -CustomValue "(Ignored)"
         }
 
-        continue
+        return
     }
-
+    
     if (-not (IsSimple -InputObject $obj)) {
         $hashCode = $obj.GetHashCode()
-        $isZeroHash = $hashCode -eq 0 #include anyway, could be empty guid, [timespan]0, etc
+        #random thoughts:
+        #$isZeroHash = $hashCode -eq 0 #include anyway, could be empty guid, [timespan]0, etc
+        #(Get-Date 0) can be a problem because of infinite .Date.Date.Date... which $MaxDepth has to handle
+        #todo: is there a better way than GetHashCode() to find duplicates?
         #$isPSCustomObjectGetHashCodeBug = $obj -is [System.Management.Automation.PSCustomObject] #include anyway, because of duplicate hashcode bug?
-        $isUnique = $HashCodes.Add($hashCode) -or $isZeroHash #-or $isPSCustomObjectGetHashCodeBug
+        $isUnique = $HashCodes.Add($hashCode) #-or $isZeroHash #-or $isPSCustomObjectGetHashCodeBug
         if ($isUnique) {
             #print complex object without value, properties will be shown later
             WriteObject -Name $Name -InputObject $obj -CustomValue '(...)'
@@ -125,7 +157,7 @@ function ObjDetail {
             #Write-Verbose "Duplicate hashcode detected: $Name = $hashCode"
             WriteObject -Name $Name -InputObject $obj -CustomValue '(Duplicate)'
 
-            continue
+            return
         }
     }
     else {
@@ -134,10 +166,10 @@ function ObjDetail {
     }
 
     $objDetailParam = @{
-            Level           = $Level + 1
-            MaxDepth        = $MaxDepth
-            HashCodes       = $HashCodes
-            ExcludeProperty = $ExcludeProperty
+        Level           = $Level + 1
+        MaxDepth        = $MaxDepth
+        HashCodes       = $HashCodes
+        ExcludeProperty = $ExcludeProperty
     }
 
     #recursive stuff
@@ -163,7 +195,7 @@ function ObjDetail {
             Write-Verbose "$cmdName, IsEnumerable Not Indexable: $Name"
             $count = -1
             foreach ($value in $obj) {
-                #beware, ObjDetail might 'continue'
+                #beware, ObjDetail might 'return' and not finish the loop
                 $count++
                 ObjDetail -InputObject $value -Name "$Name ($count)" @objDetailParam
             }

@@ -6,7 +6,8 @@
 #Import-Module GetObjectDetail
 
 #helper function for output comparison and creating test arrays
-function ConvertToCsvRow {
+#input: Get-ObjectDetail output
+function ConvertToCsvString {
     param(
         [parameter(ValueFromPipeline = $true)]$InputObject,
         [switch]$ArraySyntax,
@@ -14,7 +15,8 @@ function ConvertToCsvRow {
     )
 
     process {
-        ($InputObject | ForEach-Object {
+        ($InputObject |
+            ForEach-Object {
                 [PSCustomObject]@{
                     Name  = $_.Name
                     Value = ($_.Value | ForEach-Object { $_ }) -join ' '
@@ -165,9 +167,11 @@ Describe 'WriteObject' {
                 Name  = "name"
                 Value = "12 34"
                 Type  = "Object[]"
-            } | ConvertToCsvRow
+            } | ConvertToCsvString
             
-            WriteObject -Name "name" -InputObject $object | ConvertToCsvRow | Should Be $expected
+            $actual = WriteObject -Name "name" -InputObject $object
+            
+            ,$actual | ConvertToCsvString | Should Be $expected
         }
     }
 
@@ -178,9 +182,11 @@ Describe 'WriteObject' {
                 Name = "name"
                 Value = "custom"
                 Type = "Object[]"
-            } | ConvertToCsvRow
+            } | ConvertToCsvString
             
-            WriteObject -Name "name" -InputObject $object -CustomValue "custom" | ConvertToCsvRow | Should Be $expected
+            $actual = WriteObject -Name "name" -InputObject $object -CustomValue "custom"
+            
+            ,$actual | ConvertToCsvString | Should Be $expected
         }
     }
 }
@@ -194,7 +200,9 @@ Describe 'Get-ObjectDetail' {
                 '"$x","42","Int32"'
             ) -join ','
 
-            ,(Get-ObjectDetail -InputObject $object) | ConvertToCsvRow | Should Be $expected
+            $actual = Get-ObjectDetail -InputObject $object
+            
+            ,$actual | ConvertToCsvString | Should Be $expected
         }
     }
 
@@ -206,7 +214,9 @@ Describe 'Get-ObjectDetail' {
                 '"$x.Length","39","Int32"'
             ) -join ','
 
-            ,(Get-ObjectDetail -InputObject $object) | ConvertToCsvRow | Should Be $expected
+            $actual = Get-ObjectDetail -InputObject $object
+            
+            ,$actual | ConvertToCsvString | Should Be $expected
         }
     }
 
@@ -217,7 +227,9 @@ Describe 'Get-ObjectDetail' {
                 '"$x","(...)","DateTime"'
             ) -join ','
 
-            ,(Get-ObjectDetail -InputObject $object -MaxDepth 0) | ConvertToCsvRow | Should Be $expected
+            $actual = Get-ObjectDetail -InputObject $object -MaxDepth 0
+            
+            ,$actual | ConvertToCsvString | Should Be $expected
         }
     }
 
@@ -238,7 +250,9 @@ Describe 'Get-ObjectDetail' {
                 '"$x.IsSynchronized","False","Boolean"'
             ) -join ','
 
-            ,(Get-ObjectDetail -InputObject $object) | ConvertToCsvRow | Should Be $expected
+            $actual = Get-ObjectDetail -InputObject $object
+
+            ,$actual | ConvertToCsvString | Should Be $expected
         }
     }
 
@@ -260,11 +274,13 @@ Describe 'Get-ObjectDetail' {
                 '"$x.NotDuplicate2","42","Int32"'
             ) -join ','
 
-            ,(Get-ObjectDetail -InputObject $object -MaxDepth 1) | ConvertToCsvRow | Should Be $expected
+            $actual = Get-ObjectDetail -InputObject $object -MaxDepth 1
+
+            ,$actual | ConvertToCsvString | Should Be $expected
         }
     }
 
-    Context 'Given dictionary with mixed content' {
+    Context 'Given dictionary with mixed content, both as parameter and piped' {
         It 'Just works' {
             $object = [ordered]@{
                 hello = 13
@@ -380,7 +396,11 @@ Describe 'Get-ObjectDetail' {
                 '"$x.IsSynchronized","False","Boolean"'
             ) -join ','
 
-            ,(Get-ObjectDetail -InputObject $object) | ConvertToCsvRow | Should Be $expected
+            $actualWithParameter = Get-ObjectDetail -InputObject $object
+            $actualWithPipe = $object | Get-ObjectDetail
+
+            ,$actualWithParameter | ConvertToCsvString | Should Be $expected
+            ,$actualWithPipe | ConvertToCsvString | Should Be $expected
         }
     }
 }

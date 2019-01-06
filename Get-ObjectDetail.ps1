@@ -104,6 +104,8 @@ function ObjDetail {
     $cmdName = $PSCmdlet.MyInvocation.MyCommand
     Write-Verbose "$cmdName, $($PSBoundParameters.GetEnumerator() | % { "$($_.Key)='$($_.Value)'" })"
 
+    $obj = $InputObject
+
     if ($Level -gt $MaxDepth) {
         Write-Verbose "$cmdName, MaxDepth $MaxDepth exceeded: $Name"
         if ($DebugPreference) {
@@ -125,7 +127,6 @@ function ObjDetail {
     }
     #>
 
-    $obj = $InputObject
     <#not needed anymore, null is treated as a value anyway
     if ($null -eq $obj) {
         WriteObject -Name $Name -InputObject $obj
@@ -226,7 +227,7 @@ function ObjDetail {
 function Get-ObjectDetail {
     [CmdletBinding()]
     param(
-        [parameter(ValueFromPipeline = $true)]$InputObject,
+        [parameter(ValueFromPipeline)]$InputObject,
         [string]$Name = '$x',
         [int]$MaxDepth = 10,
         [string[]]$ExcludeProperty

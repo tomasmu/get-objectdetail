@@ -9,18 +9,19 @@
 function ConvertToCsvRow {
     param(
         [parameter(ValueFromPipeline = $true)]$InputObject,
-        [switch]$ArraySyntax
+        [switch]$ArraySyntax,
+        [char]$Delimiter = ','
     )
 
     process {
-        $InputObject | ForEach-Object {
+        ($InputObject | ForEach-Object {
                 [PSCustomObject]@{
                     Name  = $_.Name
                     Value = ($_.Value | ForEach-Object { $_ }) -join ' '
                     Type  = $_.Type
                 }
             } |
-            ConvertTo-Csv -NoTypeInformation -Delimiter ',' |
+            ConvertTo-Csv -NoTypeInformation -Delimiter $Delimiter |
             ForEach-Object {
                 if ($ArraySyntax) {
                     "'$($_ -replace "'", "''")'"
@@ -29,7 +30,7 @@ function ConvertToCsvRow {
                     $_
                 }
             } |
-            select -Skip 1
+            select -Skip 1) -join $Delimiter
     }
 }
 
@@ -123,35 +124,35 @@ Describe 'IsIndexable' {
     }
 }
 
-Describe 'EndsWithPropertyCycle' {
+Describe 'HasPropertyCycle' {
     #$x.prop.a.a.a.a     Count 4
     #$x.prop.a.b.a.b.a.b Count 3
     #$x.prop.a.b.a       Count 1 (uninteresting, repeated once in a row = a property exists)
     Context 'Given a property cycle of length 1, and -Count 2' {
         It 'Returns True if cycle occurs 2 times in the end' {
-            $cycleLength1 = '.a'
-            EndsWithPropertyCycle -Count 2 -Text "`$x.prop$p$p"     | Should Be $true
-            EndsWithPropertyCycle -Count 2 -Text "`$x.prop$p$p$p$p" | Should Be $true
+            $c1 = '.a'
+            HasPropertyCycle -Count 2 -Text "`$x.prop$c1$c1"       | Should Be $true
+            HasPropertyCycle -Count 2 -Text "`$x.prop$c1$c1$c1$c1" | Should Be $true
 
-            EndsWithPropertyCycle -Count 2 -Text "`$x.prop$p"       | Should Be $false
+            HasPropertyCycle -Count 2 -Text "`$x.prop$c1"          | Should Be $false
         }
     }
 
     Context 'Given a property cycle of length 3, and -Count 4' {
         It 'Returns True if cycle occurs 4 times in the end' {
-            $cycleLength3 = '.a.b.c'
-            EndsWithPropertyCycle -Count 4 -Text "`$x.prop$p$p$p$p"     | Should Be $true
-            EndsWithPropertyCycle -Count 4 -Text "`$x.prop$p$p$p$p$p$p" | Should Be $true
+            $c3 = '.a.b.c'
+            HasPropertyCycle -Count 4 -Text "`$x.prop$c3$c3$c3$c3"       | Should Be $true
+            HasPropertyCycle -Count 4 -Text "`$x.prop$c3$c3$c3$c3$c3$c3" | Should Be $true
 
-            EndsWithPropertyCycle -Count 4 -Text "`$x.prop$p$p$p"       | Should Be $false
+            HasPropertyCycle -Count 4 -Text "`$x.prop$c3$c3$c3"          | Should Be $false
         }
     }
 
     Context 'Given no ending property cycle' {
         It 'Returns False' {
-            EndsWithPropertyCycle -Count 2 -Text "`$x.prop.a.b.a" | Should Be $false
-            EndsWithPropertyCycle -Count 2 -Text "`$x.prop.a.a.b" | Should Be $false
-            EndsWithPropertyCycle -Count 2 -Text "`$x.prop.a.b.c" | Should Be $false
+            HasPropertyCycle -Count 2 -Text "`$x.prop.a.b.a" | Should Be $false
+            HasPropertyCycle -Count 2 -Text "`$x.prop.a.a.b" | Should Be $false
+            HasPropertyCycle -Count 2 -Text "`$x.prop.a.b.c" | Should Be $false
         }
     }
 }
@@ -191,9 +192,9 @@ Describe 'Get-ObjectDetail' {
             $object = 42
             $expected = @(
                 '"$x","42","Int32"'
-            )
+            ) -join ','
 
-            Get-ObjectDetail -InputObject $object | ConvertToCsvRow | Should Be $expected
+            ,(Get-ObjectDetail -InputObject $object) | ConvertToCsvRow | Should Be $expected
         }
     }
 
@@ -203,9 +204,9 @@ Describe 'Get-ObjectDetail' {
             $expected = @(
                 '"$x","this sentence has thirtynine characters","String"'
                 '"$x.Length","39","Int32"'
-            )
+            ) -join ','
 
-            Get-ObjectDetail -InputObject $object | ConvertToCsvRow | Should Be $expected
+            ,(Get-ObjectDetail -InputObject $object) | ConvertToCsvRow | Should Be $expected
         }
     }
 
@@ -214,9 +215,9 @@ Describe 'Get-ObjectDetail' {
             $object = Get-Date
             $expected = @(
                 '"$x","(...)","DateTime"'
-            )
+            ) -join ','
 
-            Get-ObjectDetail -InputObject $object -MaxDepth 0 | ConvertToCsvRow | Should Be $expected
+            ,(Get-ObjectDetail -InputObject $object -MaxDepth 0) | ConvertToCsvRow | Should Be $expected
         }
     }
 
@@ -235,9 +236,9 @@ Describe 'Get-ObjectDetail' {
                 '"$x.IsReadOnly","False","Boolean"'
                 '"$x.IsFixedSize","True","Boolean"'
                 '"$x.IsSynchronized","False","Boolean"'
-            )
+            ) -join ','
 
-            Get-ObjectDetail -InputObject $object | ConvertToCsvRow | Should Be $expected
+            ,(Get-ObjectDetail -InputObject $object) | ConvertToCsvRow | Should Be $expected
         }
     }
 
@@ -257,9 +258,9 @@ Describe 'Get-ObjectDetail' {
                 '"$x.Duplicate2","(Duplicate)","Hashtable"'
                 '"$x.NotDuplicate1","42","Int32"'
                 '"$x.NotDuplicate2","42","Int32"'
-            )
+            ) -join ','
 
-            Get-ObjectDetail -InputObject $object -MaxDepth 1 | ConvertToCsvRow | Should Be $expected
+            ,(Get-ObjectDetail -InputObject $object -MaxDepth 1) | ConvertToCsvRow | Should Be $expected
         }
     }
 
@@ -270,6 +271,7 @@ Describe 'Get-ObjectDetail' {
                 37 = "world!"
                 yarr = @([char]'y', 'arr')
                 someday = Get-Date 636823000000000000
+                nil = $null
             }
             $expected = @(
                 '"$x","(...)","OrderedDictionary"'
@@ -347,7 +349,8 @@ Describe 'Get-ObjectDetail' {
                 '"$x[''someday''].TimeOfDay.TotalMinutes","946.666666666667","Double"'
                 '"$x[''someday''].TimeOfDay.TotalSeconds","56800","Double"'
                 '"$x[''someday''].Year","2019","Int32"'
-                '"$x.Count","4","Int32"'
+                '"$x[''nil'']","","null"'
+                '"$x.Count","5","Int32"'
                 '"$x.IsReadOnly","False","Boolean"'
                 '"$x.Keys","(...)","OrderedDictionaryKeyValueCollection"'
                 '"$x.Keys (0)","hello","String"'
@@ -357,7 +360,9 @@ Describe 'Get-ObjectDetail' {
                 '"$x.Keys (2).Length","4","Int32"'
                 '"$x.Keys (3)","someday","String"'
                 '"$x.Keys (3).Length","7","Int32"'
-                '"$x.Keys.Count","4","Int32"'
+                '"$x.Keys (4)","nil","String"'
+                '"$x.Keys (4).Length","3","Int32"'
+                '"$x.Keys.Count","5","Int32"'
                 '"$x.Keys.SyncRoot","(...)","Object"'
                 '"$x.Keys.IsSynchronized","False","Boolean"'
                 '"$x.Values","(...)","OrderedDictionaryKeyValueCollection"'
@@ -366,15 +371,16 @@ Describe 'Get-ObjectDetail' {
                 '"$x.Values (1).Length","6","Int32"'
                 '"$x.Values (2)","(Duplicate)","Object[]"'
                 '"$x.Values (3)","(Duplicate)","DateTime"'
-                '"$x.Values.Count","4","Int32"'
+                '"$x.Values (4)","","null"'
+                '"$x.Values.Count","5","Int32"'
                 '"$x.Values.SyncRoot","(Duplicate)","Object"'
                 '"$x.Values.IsSynchronized","False","Boolean"'
                 '"$x.IsFixedSize","False","Boolean"'
                 '"$x.SyncRoot","(...)","Object"'
                 '"$x.IsSynchronized","False","Boolean"'
-            )
+            ) -join ','
 
-            Get-ObjectDetail -InputObject $object | ConvertToCsvRow | Should Be $expected
+            ,(Get-ObjectDetail -InputObject $object) | ConvertToCsvRow | Should Be $expected
         }
     }
 }

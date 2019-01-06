@@ -2,12 +2,24 @@
 #date: 2019-01-05
 
 #some helper functions..
+function IsSimple {
+    #similar to "is value type"
+    [CmdletBinding()]
+    param($InputObject)
+
+    $null -eq $InputObject -or
+    $InputObject.GetType().IsPrimitive -or
+    $InputObject -is [string] -or  #treat [string] as a value
+    $InputObject -is [enum]        #and [enum]
+}
+
 function IsEnumerable {
+    #is enumerable unless it's a "value type" like [string]
     [CmdletBinding()]
     param($InputObject)
 
     $InputObject -is [System.Collections.IEnumerable] -and
-    $InputObject -isnot [string]  #treat [string] as a value
+    -not (IsSimple -InputObject $InputObject)
 }
 
 function IsDictionary {
@@ -21,24 +33,11 @@ function IsIndexable {
     [CmdletBinding()]
     param($InputObject)
 
-    #$obj and $obj[0] are apparently equal in powershell if $obj is an unindexable datatype
+    #$x and $x[0] returns the same object if it's an unindexable datatype (e.g. KeyCollection)
 
     $null -ne $InputObject -and
     $null -ne $InputObject[0] -and  #breaks if array has $null element in [0] though :(
     $InputObject[0].GetHashCode() -ne $InputObject.GetHashCode()
-}
-
-#kind of "is value type"
-function IsSimple {
-    [CmdletBinding()]
-    param($InputObject)
-
-    $null -eq $InputObject -or
-    $InputObject.GetType().IsPrimitive -or
-    $InputObject -is [string] -or  #treat [string] as a value
-    $InputObject -is [enum]        #treat [enum] as a value
-
-    #$InputObject.GetType().IsValueType #example: [date] is valuetype :(
 }
 
 function IsIgnored {
@@ -52,7 +51,7 @@ function IsIgnored {
 #determine if string ends with a property cycle repeated $Count times, to avoid infinitely recursive types
 #i cannot always find duplicates with GetHashCode(), it returns random values on certain types
 #slightly bad workaround so it's not in use yet, there has to be a better way!
-function EndsWithPropertyCycle {
+function HasPropertyCycle {
     [CmdletBinding()]
     param(
         [string]$Text,
@@ -62,17 +61,7 @@ function EndsWithPropertyCycle {
 
     $cyclePattern = "((\.[^.]+)+)\1{$($Count - 1)}$"
 
-    $match = ([regex]$cyclePattern).Match($Text)
-    if ($match.Success) {
-        $full = $match.Groups[0].Value
-        $cycle = $match.Groups[1].Value
-        $repeats = [math]::Floor($full.Length / $cycle.Length)
-        Write-Verbose "'$Text' -> full '$full' cycle '$cycle' repeats $repeats"
-        $true
-    }
-    else {
-        $false
-    }
+    ([regex]$cyclePattern).Match($Text).Success
 }
 
 function WriteObject {
@@ -93,7 +82,7 @@ function WriteObject {
     }
 
     if ($DebugPreference) {
-        #$output | Add-Member @{ Level = $Level } #visible from outer function(!)
+        #$output | Add-Member @{ Level = $Level } #$Level visible from outer function(!)
         $output | Add-Member @{ Hash = if ($null -ne $InputObject) { $InputObject.GetHashCode() } else { 'null' } }
     }
 
@@ -124,14 +113,28 @@ function ObjDetail {
         return
     }
 
+    <#configurable?
+    $cycleCount = 2
+    if (HasPropertyCycle -Text $Name -Count $cycleCount) {
+        Write-Verbose "$cmdName, PropertyCycle exceeded: $cycleCount"
+        if ($DebugPreference) {
+            WriteObject -Name $Name -InputObject $obj -CustomValue "(PropertyCycle)"
+        }
+
+        return
+    }
+    #>
+
     $obj = $InputObject
+    <#not needed anymore, null is treated as a value anyway
     if ($null -eq $obj) {
-        #Write-Verbose "$cmdName, null: $Name"
         WriteObject -Name $Name -InputObject $obj
 
         return
     }
+    #>
 
+    #configurable?
     if (IsIgnored -InputObject $obj) {
         Write-Verbose "$cmdName, ignored: $Name"
         if ($DebugPreference) {
@@ -140,8 +143,13 @@ function ObjDetail {
 
         return
     }
+    #>
     
-    if (-not (IsSimple -InputObject $obj)) {
+    if (IsSimple -InputObject $obj) {
+        #print object and value
+        WriteObject -Name $Name -InputObject $obj
+    }
+    else {
         $hashCode = $obj.GetHashCode()
         #random thoughts:
         #$isZeroHash = $hashCode -eq 0 #include anyway, could be empty guid, [timespan]0, etc
@@ -155,14 +163,11 @@ function ObjDetail {
         }
         else {
             #Write-Verbose "Duplicate hashcode detected: $Name = $hashCode"
+            #output duplicates to not leave holes in arrays
             WriteObject -Name $Name -InputObject $obj -CustomValue '(Duplicate)'
 
             return
         }
-    }
-    else {
-        #print object and value
-        WriteObject -Name $Name -InputObject $obj
     }
 
     $objDetailParam = @{
@@ -193,11 +198,10 @@ function ObjDetail {
             #print non-indexable collection with pseudo-index: $obj (N)
             #$obj (N) can be retrieved with ($obj | select -Index N)
             Write-Verbose "$cmdName, IsEnumerable Not Indexable: $Name"
-            $count = -1
+            $count = 0
             foreach ($value in $obj) {
-                #beware, ObjDetail might 'return' and not finish the loop
-                $count++
                 ObjDetail -InputObject $value -Name "$Name ($count)" @objDetailParam
+                $count++
             }
         }
     }

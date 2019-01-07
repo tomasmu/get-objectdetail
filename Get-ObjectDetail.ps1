@@ -88,7 +88,7 @@ function IsIgnored {
     $ignoreTypePattern = '^System\.Reflection|^System\.Runtime'
 
     $null -ne $InputObject -and
-    $InputObject.GetType().Name -match $ignoreTypePattern
+    $InputObject.GetType().FullName -match $ignoreTypePattern
 }
 
 #determine if string ends with a property cycle repeated $Count times, to avoid infinitely recursive types

@@ -3,7 +3,7 @@
 
 #some helper functions..
 
-#suggestion: move the Is* functions into one
+#todo: suggestion, move the Is* functions into one
 #then use like this: $obj | Test -IsEnumerable
 <#
 function TestObject {
@@ -24,6 +24,7 @@ function TestObject {
         [Parameter(ParameterSetName = 'ShouldPrint')]
         [switch]$ShouldPrint,
         [Parameter(ParameterSetName = 'ShouldPrint')]
+        [AllowEmptyCollection()]
         [System.Collections.Generic.HashSet[int]]$HashCodes
     )
 }
@@ -40,6 +41,7 @@ function IsSimple {
     # this leads to infinite recursion of .Directory.Root.Root.Root...
     #other types give the same hashcode, e.g. $x=[pscustomobject]@{a=1};$y=[pscustomobject]@{b=1;c=2};$x.GetHashCode();$y.GetHashCode()
     #0-duplicates seems common, e.g. [timespan]0, all-zero guid, (Get-Date 0), perhaps always allow 0?
+    # except (Get-Date 0).Date.Date... recurses forever until MaxDepth, or perhaps PropertyCycle
     
     [CmdletBinding()]
     param($InputObject)
@@ -48,7 +50,7 @@ function IsSimple {
     $InputObject.GetType().IsPrimitive -or
     $InputObject -is [string] -or  #treat [string] as a value
     $InputObject -is [enum]        #and [enum]
-    #$InputObject.GetType().IsValueType #do i want this?
+    #$InputObject.GetType().IsValueType #i want to print+recurse valuetypes, e.g. enums has string+value
 }
 
 function IsEnumerable {
@@ -74,7 +76,7 @@ function IsIndexable {
     #$x and $x[0] returns the same object if it's an unindexable datatype (e.g. KeyCollection)
 
     $null -ne $InputObject -and
-    $null -ne $InputObject[0] -and  #breaks if array has $null element in [0] though :(
+    $null -ne $InputObject[0] -and
     $InputObject[0].GetHashCode() -ne $InputObject.GetHashCode()
 }
 
@@ -91,7 +93,7 @@ function IsIgnored {
 
 #determine if string ends with a property cycle repeated $Count times, to avoid infinitely recursive types
 #i cannot always find duplicates with GetHashCode(), it returns random values on certain types
-#slightly bad workaround so it's not in use yet, there has to be a better way!
+<#slightly bad workaround so it's not in use yet, there has to be a better way!
 function HasPropertyCycle {
     [CmdletBinding()]
     param(
@@ -104,6 +106,7 @@ function HasPropertyCycle {
 
     ([regex]$cyclePattern).Match($Text).Success
 }
+#>
 
 function WriteObject {
     [CmdletBinding()]
@@ -125,7 +128,7 @@ function WriteObject {
     if ($DebugPreference) {
         #$output | Add-Member @{ Level = $Level } #$Level visible from outer function(!)
         #$output | Add-Member @{ IsSimple = IsSimple -InputObject $InputObject }
-        $output | Add-Member @{ Hash = if ($null -ne $InputObject) { $InputObject.GetHashCode() } else { 'null' } }
+        #$output | Add-Member @{ Hash = if ($null -ne $InputObject) { $InputObject.GetHashCode() } else { 'null' } }
     }
 
     $output
@@ -186,13 +189,9 @@ function ObjDetail {
         WriteObject -Name $Name -InputObject $obj
     }
     else {
+        #todo: move this handling into a renamed IsSimple
         $hashCode = $obj.GetHashCode()
-        #random thoughts:
-        #$isZeroHash = $hashCode -eq 0 #include anyway, could be empty guid, [timespan]0, etc
-        #(Get-Date 0) can be a problem because of infinite .Date.Date.Date... which $MaxDepth has to handle
-        #todo: is there a better way than GetHashCode() to find duplicates?
-        #$isPSCustomObjectGetHashCodeBug = $obj -is [System.Management.Automation.PSCustomObject] #include anyway, because of duplicate hashcode bug?
-        $isUnique = $HashCodes.Add($hashCode) #-or $isZeroHash #-or $isPSCustomObjectGetHashCodeBug
+        $isUnique = $HashCodes.Add($hashCode)
         if ($isUnique) {
             #print complex object without value, properties will be shown later
             WriteObject -Name $Name -InputObject $obj -CustomValue '(...)'

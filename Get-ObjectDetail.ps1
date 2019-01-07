@@ -262,7 +262,9 @@ function ObjDetail {
     else {
         Write-Verbose "$cmdName, MaxDepth reached for properties"
         if ($DebugPreference) {
-            WriteObject -Name $Name -InputObject $obj -CustomValue '(MaxDepthProperty)'
+            if ($obj.psobject.Properties.Name.Count -gt 0) {
+                WriteObject -Name "$Name.[...]" -InputObject $obj -CustomValue '(MaxDepthProperty)'
+            }
         }
     }
 }

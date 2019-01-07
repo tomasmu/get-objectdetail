@@ -2,8 +2,45 @@
 #date: 2019-01-05
 
 #some helper functions..
+
+#suggestion: move the Is* functions into one
+#then use like this: $obj | Test -IsEnumerable
+<#
+function TestObject {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, ValueFromPipeline)]
+        $InputObject,
+
+        [Parameter(ParameterSetName = 'IsEnumerable')]
+        [switch]$IsEnumerable,
+
+        [Parameter(ParameterSetName = 'IsDictionary')]
+        [switch]$IsDictionary,
+
+        [Parameter(ParameterSetName = 'IsIndexable')]
+        [switch]$IsIndexable,
+
+        [Parameter(ParameterSetName = 'ShouldPrint')]
+        [switch]$ShouldPrint,
+        [Parameter(ParameterSetName = 'ShouldPrint')]
+        [System.Collections.Generic.HashSet[int]]$HashCodes
+    )
+}
+#>
+
 function IsSimple {
-    #similar to "is value type"
+    #todo: should probably be renamed, and move hashcode handling here
+    #its purpose is to determine if we want to print duplicate objects or not
+    # if we encounter, say, the same dictionary a second time we don't want to print it again
+    # however, occurrence of duplicate integers is of course ok
+    # "complex" objects are thus printed and have their hashcodes saved, so we don't print them again
+    # "simple" types are always written and their hashcodes aren't saved
+    #some types give random hashcodes, e.g. (gci -File | select -First 1).Directory.GetHashCode()
+    # this leads to infinite recursion of .Directory.Root.Root.Root...
+    #other types give the same hashcode, e.g. $x=[pscustomobject]@{a=1};$y=[pscustomobject]@{b=1;c=2};$x.GetHashCode();$y.GetHashCode()
+    #0-duplicates seems common, e.g. [timespan]0, all-zero guid, (Get-Date 0), perhaps always allow 0?
+    
     [CmdletBinding()]
     param($InputObject)
 
@@ -11,6 +48,7 @@ function IsSimple {
     $InputObject.GetType().IsPrimitive -or
     $InputObject -is [string] -or  #treat [string] as a value
     $InputObject -is [enum]        #and [enum]
+    #$InputObject.GetType().IsValueType #do i want this?
 }
 
 function IsEnumerable {
@@ -44,8 +82,11 @@ function IsIgnored {
     [CmdletBinding()]
     param($InputObject)
     
+    #reflection can really get out of hand
+    $ignoreTypePattern = '^System\.Reflection|^System\.Runtime'
+
     $null -ne $InputObject -and
-    $InputObject.GetType().Name -match '^Runtime' #reflection can really get out of hand
+    $InputObject.GetType().Name -match $ignoreTypePattern
 }
 
 #determine if string ends with a property cycle repeated $Count times, to avoid infinitely recursive types
@@ -83,6 +124,7 @@ function WriteObject {
 
     if ($DebugPreference) {
         #$output | Add-Member @{ Level = $Level } #$Level visible from outer function(!)
+        #$output | Add-Member @{ IsSimple = IsSimple -InputObject $InputObject }
         $output | Add-Member @{ Hash = if ($null -ne $InputObject) { $InputObject.GetHashCode() } else { 'null' } }
     }
 
@@ -93,6 +135,7 @@ function WriteObject {
 function ObjDetail {
     [CmdletBinding()]
     param(
+        #[Parameter(ValueFromPipeline)]
         $InputObject,
         [string]$Name,
         [int]$Level,
@@ -101,10 +144,10 @@ function ObjDetail {
         [string[]]$ExcludeProperty
     )
 
-    $cmdName = $PSCmdlet.MyInvocation.MyCommand
-    Write-Verbose "$cmdName, $($PSBoundParameters.GetEnumerator() | % { "$($_.Key)='$($_.Value)'" })"
-
     $obj = $InputObject
+
+    $cmdName = $PSCmdlet.MyInvocation.MyCommand
+    Write-Verbose "$cmdName, $($PSBoundParameters.GetEnumerator() | ? Key -ne 'HashCodes' | % { "$($_.Key)='$($_.Value)'" })"
 
     if ($Level -gt $MaxDepth) {
         Write-Verbose "$cmdName, MaxDepth $MaxDepth exceeded: $Name"
@@ -122,14 +165,6 @@ function ObjDetail {
         if ($DebugPreference) {
             WriteObject -Name $Name -InputObject $obj -CustomValue "(PropertyCycle)"
         }
-
-        return
-    }
-    #>
-
-    <#not needed anymore, null is treated as a value anyway
-    if ($null -eq $obj) {
-        WriteObject -Name $Name -InputObject $obj
 
         return
     }
@@ -207,18 +242,27 @@ function ObjDetail {
         }
     }
 
-    #print properties
-    foreach ($prop in $obj.psobject.Properties) {
-        $property = $prop.Name
-        $value = $prop.Value
-        if ($property -notin $ExcludeProperty) {
-            ObjDetail -InputObject $value -Name "$Name.$property" @objDetailParam
-        }
-        else {
-            #Write-Verbose "$cmdName, ExcludedProperty: $Name"
-            if ($DebugPreference) {
-                WriteObject -Name "$Name.$property" -InputObject $value -CustomValue '(ExcludedProperty)'
+    #ignore properties if $MaxDepth would be reached
+    if ($Level -lt $MaxDepth) {
+        #print properties
+        foreach ($prop in $obj.psobject.Properties) {
+            $property = $prop.Name
+            $value = $prop.Value
+            if ($property -notin $ExcludeProperty) {
+                ObjDetail -InputObject $value -Name "$Name.$property" @objDetailParam
             }
+            else {
+                #Write-Verbose "$cmdName, ExcludedProperty: $Name"
+                if ($DebugPreference) {
+                    WriteObject -Name "$Name.$property" -InputObject $value -CustomValue '(ExcludedProperty)'
+                }
+            }
+        }
+    }
+    else {
+        Write-Verbose "$cmdName, MaxDepth reached for properties"
+        if ($DebugPreference) {
+            WriteObject -Name $Name -InputObject $obj -CustomValue '(MaxDepthProperty)'
         }
     }
 }

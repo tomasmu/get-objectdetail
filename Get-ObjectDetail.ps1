@@ -191,7 +191,8 @@ function ObjDetail {
     else {
         #todo: move this handling into a renamed IsSimple
         $hashCode = $obj.GetHashCode()
-        $isUnique = $HashCodes.Add($hashCode)
+        $isPSCustomObject = $obj -is [PSCustomObject] #all PSCustomObjects return the same hash (bug?)
+        $isUnique = $HashCodes.Add($hashCode) -or $isPSCustomObject
         if ($isUnique) {
             #print complex object without value, properties will be shown later
             WriteObject -Name $Name -InputObject $obj -CustomValue '(...)'

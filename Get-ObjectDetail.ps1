@@ -117,8 +117,8 @@ function WriteObject {
     )
 
     $value = if ($null -eq $CustomValue) { $InputObject } else { $CustomValue }
-    $type = if ($null -ne $InputObject) { $InputObject.GetType().Name } else { 'null' }
-
+    $type = if ($null -ne $InputObject) { $InputObject.GetType() } else { $null }
+    
     $output = [PSCustomObject]@{
         Name  = $Name
         Value = $value

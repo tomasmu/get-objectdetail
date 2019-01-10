@@ -36,51 +36,70 @@ function ConvertToCsvString {
     }
 }
 
-Describe 'IsEnumerable' {
+Describe 'Is -Enumerable' {
     #todo: split into separate tests
     Context 'Given an IEnumerable (array/hashtable/list)' {
         It 'Returns True' {
-            IsEnumerable @() | Should Be $true
-            IsEnumerable @{} | Should Be $true
-            IsEnumerable ([System.Collections.Generic.List[int]]::new()) | Should Be $true
+            Is @() -Enumerable | Should Be $true
+            Is @{} -Enumerable | Should Be $true
+            Is ([System.Collections.Generic.List[int]]::new()) -Enumerable | Should Be $true
+            
+            Is -Enumerable @() | Should Be $true
+            Is -Enumerable @{} | Should Be $true
+            Is -Enumerable ([System.Collections.Generic.List[int]]::new()) | Should Be $true
         }
     }
 
     Context 'Given an enumerable type (string) which we want to treat as a value' {
         It 'Returns False' {
-            IsEnumerable "special case" | Should Be $false
+            Is "special case" -Enumerable | Should Be $false
+    
+            Is -Enumerable "special case" | Should Be $false
         }
     }
-
+    
     Context 'Given non-enumerable types (null/int/date)' {
         It 'Returns False' {
-            IsEnumerable $null | Should Be $false
-            IsEnumerable 42 | Should Be $false
-            IsEnumerable (Get-Date) | Should Be $false
+            Is $null -Enumerable | Should Be $false
+            Is 42 -Enumerable | Should Be $false
+            Is (Get-Date) -Enumerable | Should Be $false
+    
+            Is -Enumerable $null | Should Be $false
+            Is -Enumerable 42 | Should Be $false
+            Is -Enumerable (Get-Date) | Should Be $false
         }
     }
 }
 
-Describe 'IsDictionary' {
+Describe 'Is -Dictionary' {
     Context 'Given a dictionary (hashtable)' {
         It 'Returns True' {
-            IsDictionary @{ a = 42 } | Should Be $true
+            Is @{ a = 42 } -Dictionary | Should Be $true
+
+            Is -Dictionary @{ a = 42 } | Should Be $true
         }
     }
 
     Context 'Given a non-dictionary (hashset)' {
         It 'Returns False' {
-            IsDictionary ([System.Collections.Generic.HashSet[string]]::new()) | Should Be $false
+            Is -Dictionary ([System.Collections.Generic.HashSet[string]]::new()) | Should Be $false
+
+            Is ([System.Collections.Generic.HashSet[string]]::new()) -Dictionary | Should Be $false
         }
     }
 
     #todo: split into separate tests
     Context 'Given a non-dictionary (null/array/int/string)' {
         It 'Returns False' {
-            IsDictionary $null | Should Be $false
-            IsDictionary @('42') | Should Be $false
-            IsDictionary 42 | Should Be $false
-            IsDictionary "str" | Should Be $false
+            Is -Dictionary $null | Should Be $false
+            Is -Dictionary @('42') | Should Be $false
+            Is -Dictionary 42 | Should Be $false
+            Is -Dictionary "str" | Should Be $false
+
+            Is $null -Dictionary | Should Be $false
+            Is @('42') -Dictionary | Should Be $false
+            Is 42 -Dictionary | Should Be $false
+            Is "str" -Dictionary | Should Be $false
         }
     }
 }
@@ -106,26 +125,36 @@ Describe 'IsSimple' {
     }
 }
 
-Describe 'IsIndexable' {
+Describe 'Is -Indexable' {
     #todo: split into separate tests
     Context 'Given a type which is indexable with integers (string/array/intArray)' {
         It 'Returns True' {
-            IsIndexable "str" | Should Be $true
-            IsIndexable @('a', 1) | Should Be $true
-            IsIndexable ([int[]](12, 34)) | Should Be $true
+            Is -Indexable "str" | Should Be $true
+            Is -Indexable @('a', 1) | Should Be $true
+            Is -Indexable ([int[]](12, 34)) | Should Be $true
+
+            Is "str" -Indexable | Should Be $true
+            Is @('a', 1) -Indexable | Should Be $true
+            Is ([int[]](12, 34)) -Indexable | Should Be $true
         }
     }
 
     Context 'Given a type that cannot be indexable with integers (null/dictionary/hashset/int)' {
         It 'Returns False' {
-            IsIndexable $null | Should Be $false
-            IsIndexable @{ 'a' = 1 } | Should Be $false
-            IsIndexable ([System.Collections.Generic.HashSet[string]]) | Should Be $false
-            IsIndexable 42 | Should Be $false
+            Is -Indexable $null | Should Be $false
+            Is -Indexable @{ 'a' = 1 } | Should Be $false
+            Is -Indexable ([System.Collections.Generic.HashSet[string]]) | Should Be $false
+            Is -Indexable 42 | Should Be $false
+
+            Is $null -Indexable | Should Be $false
+            Is @{ 'a' = 1 } -Indexable | Should Be $false
+            Is ([System.Collections.Generic.HashSet[string]]) -Indexable | Should Be $false
+            Is 42 -Indexable | Should Be $false
         }
     }
 }
 
+<#
 Describe 'HasPropertyCycle' {
     #$x.prop.a.a.a.a     Count 4
     #$x.prop.a.b.a.b.a.b Count 3
@@ -158,6 +187,7 @@ Describe 'HasPropertyCycle' {
         }
     }
 }
+#>
 
 Describe 'WriteObject' {
     Context 'Given an object with value' {
@@ -281,7 +311,7 @@ Describe 'Get-ObjectDetail' {
     }
 
     Context 'Given dictionary with mixed content, both as parameter and piped' {
-        It 'Just works' {
+        It 'Name and Value works' {
             $object = [ordered]@{
                 hello = 13
                 37 = "world!"
@@ -404,3 +434,4 @@ Describe 'Get-ObjectDetail' {
         }
     }
 }
+#>

@@ -4,29 +4,63 @@
 #some helper functions..
 
 #todo: suggestion, move the Is* functions into one
-#then use like this: $obj | Test -IsEnumerable
-<#
-function TestObject {
+#then use like this: $object | Test -IsEnumerable
+function Is {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory, ValueFromPipeline)]
+        [AllowNull()]
+        [Parameter(Mandatory, Position = 0)]
         $InputObject,
 
-        [Parameter(ParameterSetName = 'IsEnumerable')]
-        [switch]$IsEnumerable,
+        [Parameter(Mandatory, ParameterSetName = 'Enumerable')]
+        [Alias('Enumerable?')]
+        [switch]$Enumerable,
 
-        [Parameter(ParameterSetName = 'IsDictionary')]
-        [switch]$IsDictionary,
+        [Parameter(Mandatory, ParameterSetName = 'Dictionary')]
+        [Alias('Dictionary?')]
+        [switch]$Dictionary,
 
-        [Parameter(ParameterSetName = 'IsIndexable')]
-        [switch]$IsIndexable,
+        [Parameter(Mandatory, ParameterSetName = 'Indexable')]
+        [Alias('Indexable?')]
+        [switch]$Indexable
 
-        [Parameter(ParameterSetName = 'ShouldPrint')]
-        [switch]$ShouldPrint,
-        [Parameter(ParameterSetName = 'ShouldPrint')]
-        [AllowEmptyCollection()]
-        [System.Collections.Generic.HashSet[int]]$HashCodes
+        #todo: not quite sure about this
+        #[Parameter(Mandatory, ParameterSetName = 'Unique')]
+        #[Alias('Unique?')]
+        #[switch]$Unique,
+        #
+        #[Parameter(Mandatory, ParameterSetName = 'Unique')]
+        #[AllowEmptyCollection()]
+        #[System.Collections.Generic.HashSet[int]]$HashCodes
     )
+
+    $global:hest = $PSBoundParameters
+
+    if ($Enumerable) {
+        #is enumerable unless it's a "value type"
+        #special case: [string] is excluded
+
+        $InputObject -is [System.Collections.IEnumerable] -and
+        -not (IsSimple -InputObject $InputObject)
+    }
+    elseif ($Dictionary) {
+        $InputObject -is [System.Collections.IDictionary]
+    }
+    elseif ($Indexable) {
+        #$x and $x[0] returns the same object if it's an unindexable datatype (e.g. KeyCollection)
+
+        $null -ne $InputObject -and
+        $null -ne $InputObject[0] -and
+        $InputObject[0].GetHashCode() -ne $InputObject.GetHashCode()
+    }
+    elseif ($Unique) {
+        "Unique $InputObject"
+    }
+    else {
+        #wat
+        "horse"
+        throw
+    }
 }
 #>
 
@@ -41,7 +75,7 @@ function IsSimple {
     # this leads to infinite recursion of .Directory.Root.Root.Root...
     #other types give the same hashcode, e.g. $x=[pscustomobject]@{a=1};$y=[pscustomobject]@{b=1;c=2};$x.GetHashCode();$y.GetHashCode()
     #0-duplicates seems common, e.g. [timespan]0, all-zero guid, (Get-Date 0), perhaps always allow 0?
-    # except (Get-Date 0).Date.Date... recurses forever until MaxDepth, or perhaps PropertyCycle
+    # except (Get-Date 0).Date.Date... recurses forever until Depth, or perhaps PropertyCycle
     
     [CmdletBinding()]
     param($InputObject)
@@ -51,33 +85,6 @@ function IsSimple {
     $InputObject -is [string] -or  #treat [string] as a value
     $InputObject -is [enum]        #and [enum]
     #$InputObject.GetType().IsValueType #i want to print+recurse valuetypes, e.g. enums has string+value
-}
-
-function IsEnumerable {
-    #is enumerable unless it's a "value type" like [string]
-    [CmdletBinding()]
-    param($InputObject)
-
-    $InputObject -is [System.Collections.IEnumerable] -and
-    -not (IsSimple -InputObject $InputObject)
-}
-
-function IsDictionary {
-    [CmdletBinding()]
-    param($InputObject)
-
-    $InputObject -is [System.Collections.IDictionary]
-}
-
-function IsIndexable {
-    [CmdletBinding()]
-    param($InputObject)
-
-    #$x and $x[0] returns the same object if it's an unindexable datatype (e.g. KeyCollection)
-
-    $null -ne $InputObject -and
-    $null -ne $InputObject[0] -and
-    $InputObject[0].GetHashCode() -ne $InputObject.GetHashCode()
 }
 
 function IsIgnored {
@@ -142,20 +149,20 @@ function ObjDetail {
         $InputObject,
         [string]$Name,
         [int]$Level,
-        [int]$MaxDepth,
+        [int]$Depth,
         [System.Collections.Generic.HashSet[int]]$HashCodes,
         [string[]]$ExcludeProperty
     )
 
-    $obj = $InputObject
+    $object = $InputObject
 
     $cmdName = $PSCmdlet.MyInvocation.MyCommand
     Write-Verbose "$cmdName, $($PSBoundParameters.GetEnumerator() | ? Key -ne 'HashCodes' | % { "$($_.Key)='$($_.Value)'" })"
 
-    if ($Level -gt $MaxDepth) {
-        Write-Verbose "$cmdName, MaxDepth $MaxDepth exceeded: $Name"
+    if ($Level -gt $Depth) {
+        Write-Verbose "$cmdName, Depth $Depth exceeded: $Name"
         if ($DebugPreference) {
-            WriteObject -Name $Name -InputObject $obj -CustomValue '(MaxDepth)'
+            WriteObject -Name $Name -InputObject $object -CustomValue '(Depth)'
         }
 
         return
@@ -166,7 +173,7 @@ function ObjDetail {
     if (HasPropertyCycle -Text $Name -Count $cycleCount) {
         Write-Verbose "$cmdName, PropertyCycle exceeded: $cycleCount"
         if ($DebugPreference) {
-            WriteObject -Name $Name -InputObject $obj -CustomValue "(PropertyCycle)"
+            WriteObject -Name $Name -InputObject $object -CustomValue "(PropertyCycle)"
         }
 
         return
@@ -174,33 +181,33 @@ function ObjDetail {
     #>
 
     #configurable?
-    if (IsIgnored -InputObject $obj) {
+    if (IsIgnored -InputObject $object) {
         Write-Verbose "$cmdName, ignored: $Name"
         if ($DebugPreference) {
-            WriteObject -Name $Name -InputObject $obj -CustomValue "(Ignored)"
+            WriteObject -Name $Name -InputObject $object -CustomValue "(Ignored)"
         }
 
         return
     }
     #>
     
-    if (IsSimple -InputObject $obj) {
+    if (IsSimple -InputObject $object) {
         #print object and value
-        WriteObject -Name $Name -InputObject $obj
+        WriteObject -Name $Name -InputObject $object
     }
     else {
         #todo: move this handling into a renamed IsSimple
-        $hashCode = $obj.GetHashCode()
-        $isPSCustomObject = $obj -is [PSCustomObject] #all PSCustomObjects return the same hash (bug?)
+        $hashCode = $object.GetHashCode()
+        $isPSCustomObject = $object -is [PSCustomObject] #all PSCustomObjects return the same hash (bug?)
         $isUnique = $HashCodes.Add($hashCode) -or $isPSCustomObject
         if ($isUnique) {
             #print complex object without value, properties will be shown later
-            WriteObject -Name $Name -InputObject $obj -CustomValue '(...)'
+            WriteObject -Name $Name -InputObject $object -CustomValue '(...)'
         }
         else {
             #Write-Verbose "Duplicate hashcode detected: $Name = $hashCode"
             #output duplicates to not leave holes in arrays
-            WriteObject -Name $Name -InputObject $obj -CustomValue '(Duplicate)'
+            WriteObject -Name $Name -InputObject $object -CustomValue '(DuplicateHashCode)'
 
             return
         }
@@ -208,44 +215,44 @@ function ObjDetail {
 
     $objDetailParam = @{
         Level           = $Level + 1
-        MaxDepth        = $MaxDepth
+        Depth           = $Depth
         HashCodes       = $HashCodes
         ExcludeProperty = $ExcludeProperty
     }
 
     #recursive stuff
-    if (IsDictionary -InputObject $obj) {
-        Write-Verbose "$cmdName, IsDictionary: $Name"
-        foreach ($keyValue in $obj.GetEnumerator()) {
+    if (Is $object -Dictionary) {
+        Write-Verbose "$cmdName, Is -Dictionary: $Name"
+        foreach ($keyValue in $object.GetEnumerator()) {
             $key = $keyValue.Key
             $value = $keyValue.Value
             ObjDetail -InputObject $value -Name "$Name['$key']" @objDetailParam
         }
     }
-    elseif (IsEnumerable -InputObject $obj) {
-        if (IsIndexable -InputObject $obj) {
-            Write-Verbose "$cmdName, IsEnumerable IsIndexable: $Name"
-            for ($index = 0; $index -lt $obj.Count; $index++) {
-                $value = $obj[$index]
+    elseif (Is $object -Enumerable) {
+        if (IsIndexable -InputObject $object) {
+            Write-Verbose "$cmdName, Is Enumerable Is Indexable: $Name"
+            for ($index = 0; $index -lt $object.Count; $index++) {
+                $value = $object[$index]
                 ObjDetail -InputObject $value -Name "$Name[$index]" @objDetailParam
             }
         }
         else {
-            #print non-indexable collection with pseudo-index: $obj (N)
-            #$obj (N) can be retrieved with ($obj | select -Index N)
-            Write-Verbose "$cmdName, IsEnumerable Not Indexable: $Name"
+            #print non-indexable collection with pseudo-index: $object (N)
+            #$object (N) can be retrieved with ($object | select -Index N)
+            Write-Verbose "$cmdName, Is Enumerable Not Indexable: $Name"
             $count = 0
-            foreach ($value in $obj) {
+            foreach ($value in $object) {
                 ObjDetail -InputObject $value -Name "$Name ($count)" @objDetailParam
                 $count++
             }
         }
     }
 
-    #ignore properties if $MaxDepth would be reached
-    if ($Level -lt $MaxDepth) {
+    #ignore properties if $Depth would be reached
+    if ($Level -lt $Depth) {
         #print properties
-        foreach ($prop in $obj.psobject.Properties) {
+        foreach ($prop in $object.psobject.Properties) {
             $property = $prop.Name
             $value = $prop.Value
             if ($property -notin $ExcludeProperty) {
@@ -260,10 +267,10 @@ function ObjDetail {
         }
     }
     else {
-        Write-Verbose "$cmdName, MaxDepth reached for properties"
+        Write-Verbose "$cmdName, Depth reached for properties"
         if ($DebugPreference) {
-            if ($obj.psobject.Properties.Name.Count -gt 0) {
-                WriteObject -Name "$Name.[...]" -InputObject $obj -CustomValue '(MaxDepthProperty)'
+            if ($object.psobject.Properties.Name.Count -gt 0) {
+                WriteObject -Name "$Name.[...]" -InputObject $object -CustomValue '(Depth.Property)'
             }
         }
     }
@@ -274,16 +281,17 @@ function Get-ObjectDetail {
     [CmdletBinding()]
     param(
         [parameter(ValueFromPipeline)]$InputObject,
-        [string]$Name = '$x',
-        [int]$MaxDepth = 10,
+        [string]$Name = '$_',
+        [int]$Depth = 5,
         [string[]]$ExcludeProperty
+        #todo: $ExcludeTypes?
     )
 
     begin {
         $objDetailParam = @{
             Name            = $Name
             Level           = 0
-            MaxDepth        = $MaxDepth
+            Depth           = $Depth
             HashCodes       = [System.Collections.Generic.HashSet[int]]::new()
             ExcludeProperty = $ExcludeProperty
         }

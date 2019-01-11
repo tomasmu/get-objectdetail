@@ -9,7 +9,7 @@
 #input: Get-ObjectDetail output
 function ConvertToCsvString {
     param(
-        [parameter(ValueFromPipeline = $true)]$InputObject,
+        [parameter(ValueFromPipeline)]$InputObject,
         [switch]$ArraySyntax,
         [char]$Delimiter = ','
     )
@@ -104,23 +104,39 @@ Describe 'Is -Dictionary' {
     }
 }
 
-Describe 'IsSimple' {
+Describe 'Is -SimpleType' {
     #todo: split into separate tests
     Context "Given a 'simple/value/primitive' type (null/int/string)" {
         It "Returns True" {
-            IsSimple $null | Should Be $true
-            IsSimple 42 | Should Be $true
-            IsSimple "str" | Should Be $true
+            Is -SimpleType $null | Should Be $true
+            Is -SimpleType 42 | Should Be $true
+            Is -SimpleType "str" | Should Be $true
+
+            Is $null -SimpleType | Should Be $true
+            Is 42 -SimpleType | Should Be $true
+            Is "str" -SimpleType | Should Be $true
+        }
+    }
+
+    Context "Given enum" {
+        It "some" {
+            Is (Get-Date).DayOfWeek -SimpleType | Should Be $true
         }
     }
 
     Context 'Given complex type (array/hashtable/guid/intarray/timespan)' {
         It 'Returns False' {
-            IsSimple @('a', 1) | Should Be $false
-            IsSimple @{ 'a' = 1 } | Should Be $false
-            IsSimple (New-Guid) | Should Be $false
-            IsSimple ([int[]](12, 34)) | Should Be $false
-            IsSimple ([timespan]::new(1)) | Should Be $false
+            Is -SimpleType @('a', 1) | Should Be $false
+            Is -SimpleType @{ 'a' = 1 } | Should Be $false
+            Is -SimpleType (New-Guid) | Should Be $false
+            Is -SimpleType ([int[]](12, 34)) | Should Be $false
+            Is -SimpleType ([timespan]::new(1)) | Should Be $false
+
+            Is @('a', 1) -SimpleType | Should Be $false
+            Is @{ 'a' = 1 } -SimpleType | Should Be $false
+            Is (New-Guid) -SimpleType | Should Be $false
+            Is ([int[]](12, 34)) -SimpleType | Should Be $false
+            Is ([timespan]::new(1)) -SimpleType | Should Be $false
         }
     }
 }
@@ -150,6 +166,23 @@ Describe 'Is -Indexable' {
             Is @{ 'a' = 1 } -Indexable | Should Be $false
             Is ([System.Collections.Generic.HashSet[string]]) -Indexable | Should Be $false
             Is 42 -Indexable | Should Be $false
+        }
+    }
+}
+
+Describe 'Is -PSCustomObjectHashCode' {
+    Context 'Given a PSCustomObject' {
+        It 'Returns True if two different PSCustomObjects have the same GetHashCode() [unexpected but current behaviour 2019-01-10]' {
+            Is ([PSCustomObject]@{ I = 'am'; a = 'PSCustomObject' }) -PSCustomObjectHashCode | Should Be $true
+            Is ([PSCustomObject]@{ And = "I'm"; another = 'PSCustomObject!' }) -PSCustomObjectHashCode | Should Be $true
+        }
+    }
+
+    Context 'Given other types (psobject, hashtable, string)' {
+        It 'Returns False' {
+            Is ([psobject]@{ ps = "object" }) -PSCustomObjectHashCode | Should Be $false
+            Is (@{ horse = "table" }) -PSCustomObjectHashCode | Should Be $false
+            Is "mary powershelley" -PSCustomObjectHashCode | Should Be $false
         }
     }
 }
@@ -190,13 +223,14 @@ Describe 'HasPropertyCycle' {
 #>
 
 Describe 'WriteObject' {
+    #i should really write my own comparison and ditch ConvertToCsvString.. maybe?
     Context 'Given an object with value' {
         It 'Outputs the properties we want' {
             $object = @(12, 34)
             $expected = [PSCustomObject]@{
                 Name  = "name"
                 Value = "12 34"
-                Type  = "Object[]"
+                Type  = "System.Object[]"
             } | ConvertToCsvString
             
             $actual = WriteObject -Name "name" -InputObject $object
@@ -211,7 +245,7 @@ Describe 'WriteObject' {
             $expected = [PSCustomObject]@{
                 Name = "name"
                 Value = "custom"
-                Type = "Object[]"
+                Type = "System.Object[]"
             } | ConvertToCsvString
             
             $actual = WriteObject -Name "name" -InputObject $object -CustomValue "custom"
@@ -227,7 +261,7 @@ Describe 'Get-ObjectDetail' {
         It 'Returns expected object' {
             $object = 42
             $expected = @(
-                '"$x","42","Int32"'
+                '"$_","42","System.Int32"'
             ) -join ','
 
             $actual = Get-ObjectDetail -InputObject $object
@@ -240,8 +274,8 @@ Describe 'Get-ObjectDetail' {
         It 'Returns expected object and properties' {
             $object = "this sentence has thirtynine characters"
             $expected = @(
-                '"$x","this sentence has thirtynine characters","String"'
-                '"$x.Length","39","Int32"'
+                '"$_","this sentence has thirtynine characters","System.String"'
+                '"$_.Length","39","System.Int32"'
             ) -join ','
 
             $actual = Get-ObjectDetail -InputObject $object
@@ -254,10 +288,10 @@ Describe 'Get-ObjectDetail' {
         It 'Shows (...) as object value since its content will be expanded later' {
             $object = Get-Date
             $expected = @(
-                '"$x","(...)","DateTime"'
+                '"$_","(...)","System.DateTime"'
             ) -join ','
 
-            $actual = Get-ObjectDetail -InputObject $object -MaxDepth 0
+            $actual = Get-ObjectDetail -InputObject $object -Depth 0
             
             ,$actual | ConvertToCsvString | Should Be $expected
         }
@@ -265,19 +299,20 @@ Describe 'Get-ObjectDetail' {
 
     Context 'Given int array' {
         It 'Returns expected object' {
-            $object = [int[]](12, 34)
+            $object = [int[]](12, 34, 56)
             $expected = @(
-                '"$x","(...)","Int32[]"'
-                '"$x[0]","12","Int32"'
-                '"$x[1]","34","Int32"'
-                '"$x.Count","2","Int32"'
-                '"$x.Length","2","Int32"'
-                '"$x.LongLength","2","Int64"'
-                '"$x.Rank","1","Int32"'
-                '"$x.SyncRoot","(Duplicate)","Int32[]"'
-                '"$x.IsReadOnly","False","Boolean"'
-                '"$x.IsFixedSize","True","Boolean"'
-                '"$x.IsSynchronized","False","Boolean"'
+                '"$_","(...)","System.Int32[]"'
+                '"$_[0]","12","System.Int32"'
+                '"$_[1]","34","System.Int32"'
+                '"$_[2]","56","System.Int32"'
+                '"$_.Count","3","System.Int32"'
+                '"$_.Length","3","System.Int32"'
+                '"$_.LongLength","3","System.Int64"'
+                '"$_.Rank","1","System.Int32"'
+                '"$_.SyncRoot","(DuplicateHashCode)","System.Int32[]"'
+                '"$_.IsReadOnly","False","System.Boolean"'
+                '"$_.IsFixedSize","True","System.Boolean"'
+                '"$_.IsSynchronized","False","System.Boolean"'
             ) -join ','
 
             $actual = Get-ObjectDetail -InputObject $object
@@ -297,21 +332,21 @@ Describe 'Get-ObjectDetail' {
                 NotDuplicate2 = $notDuplicate
             }
             $expected = @(
-                '"$x","(...)","PSCustomObject"'
-                '"$x.Duplicate1","(...)","Hashtable"'
-                '"$x.Duplicate2","(Duplicate)","Hashtable"'
-                '"$x.NotDuplicate1","42","Int32"'
-                '"$x.NotDuplicate2","42","Int32"'
+                '"$_","(...)","System.Management.Automation.PSCustomObject"'
+                '"$_.Duplicate1","(...)","System.Collections.Hashtable"'
+                '"$_.Duplicate2","(DuplicateHashCode)","System.Collections.Hashtable"'
+                '"$_.NotDuplicate1","42","System.Int32"'
+                '"$_.NotDuplicate2","42","System.Int32"'
             ) -join ','
 
-            $actual = Get-ObjectDetail -InputObject $object -MaxDepth 1
+            $actual = Get-ObjectDetail -InputObject $object -Depth 1
 
             ,$actual | ConvertToCsvString | Should Be $expected
         }
     }
 
     Context 'Given dictionary with mixed content, both as parameter and piped' {
-        It 'Name and Value works' {
+        It 'It Just Works' {
             $object = [ordered]@{
                 hello = 13
                 37 = "world!"
@@ -320,110 +355,110 @@ Describe 'Get-ObjectDetail' {
                 nil = $null
             }
             $expected = @(
-                '"$x","(...)","OrderedDictionary"'
-                '"$x[''hello'']","13","Int32"'
-                '"$x[''37'']","world!","String"'
-                '"$x[''37''].Length","6","Int32"'
-                '"$x[''yarr'']","(...)","Object[]"'
-                '"$x[''yarr''][0]","y","Char"'
-                '"$x[''yarr''][1]","arr","String"'
-                '"$x[''yarr''][1].Length","3","Int32"'
-                '"$x[''yarr''].Count","2","Int32"'
-                '"$x[''yarr''].Length","2","Int32"'
-                '"$x[''yarr''].LongLength","2","Int64"'
-                '"$x[''yarr''].Rank","1","Int32"'
-                '"$x[''yarr''].SyncRoot","(Duplicate)","Object[]"'
-                '"$x[''yarr''].IsReadOnly","False","Boolean"'
-                '"$x[''yarr''].IsFixedSize","True","Boolean"'
-                '"$x[''yarr''].IsSynchronized","False","Boolean"'
-                '"$x[''someday'']","(...)","DateTime"'
-                '"$x[''someday''].DisplayHint","DateTime","DisplayHintType"'
-                '"$x[''someday''].DisplayHint.value__","2","Int32"'
-                '"$x[''someday''].DateTime","den 5 januari 2019 15:46:40","String"'
-                '"$x[''someday''].DateTime.Length","27","Int32"'
-                '"$x[''someday''].Date","(...)","DateTime"'
-                '"$x[''someday''].Date.DateTime","den 5 januari 2019 00:00:00","String"'
-                '"$x[''someday''].Date.DateTime.Length","27","Int32"'
-                '"$x[''someday''].Date.Date","(Duplicate)","DateTime"'
-                '"$x[''someday''].Date.Day","5","Int32"'
-                '"$x[''someday''].Date.DayOfWeek","Saturday","DayOfWeek"'
-                '"$x[''someday''].Date.DayOfWeek.value__","6","Int32"'
-                '"$x[''someday''].Date.DayOfYear","5","Int32"'
-                '"$x[''someday''].Date.Hour","0","Int32"'
-                '"$x[''someday''].Date.Kind","Unspecified","DateTimeKind"'
-                '"$x[''someday''].Date.Kind.value__","0","Int32"'
-                '"$x[''someday''].Date.Millisecond","0","Int32"'
-                '"$x[''someday''].Date.Minute","0","Int32"'
-                '"$x[''someday''].Date.Month","1","Int32"'
-                '"$x[''someday''].Date.Second","0","Int32"'
-                '"$x[''someday''].Date.Ticks","636822432000000000","Int64"'
-                '"$x[''someday''].Date.TimeOfDay","(...)","TimeSpan"'
-                '"$x[''someday''].Date.TimeOfDay.Ticks","0","Int64"'
-                '"$x[''someday''].Date.TimeOfDay.Days","0","Int32"'
-                '"$x[''someday''].Date.TimeOfDay.Hours","0","Int32"'
-                '"$x[''someday''].Date.TimeOfDay.Milliseconds","0","Int32"'
-                '"$x[''someday''].Date.TimeOfDay.Minutes","0","Int32"'
-                '"$x[''someday''].Date.TimeOfDay.Seconds","0","Int32"'
-                '"$x[''someday''].Date.TimeOfDay.TotalDays","0","Double"'
-                '"$x[''someday''].Date.TimeOfDay.TotalHours","0","Double"'
-                '"$x[''someday''].Date.TimeOfDay.TotalMilliseconds","0","Double"'
-                '"$x[''someday''].Date.TimeOfDay.TotalMinutes","0","Double"'
-                '"$x[''someday''].Date.TimeOfDay.TotalSeconds","0","Double"'
-                '"$x[''someday''].Date.Year","2019","Int32"'
-                '"$x[''someday''].Day","5","Int32"'
-                '"$x[''someday''].DayOfWeek","Saturday","DayOfWeek"'
-                '"$x[''someday''].DayOfWeek.value__","6","Int32"'
-                '"$x[''someday''].DayOfYear","5","Int32"'
-                '"$x[''someday''].Hour","15","Int32"'
-                '"$x[''someday''].Kind","Unspecified","DateTimeKind"'
-                '"$x[''someday''].Kind.value__","0","Int32"'
-                '"$x[''someday''].Millisecond","0","Int32"'
-                '"$x[''someday''].Minute","46","Int32"'
-                '"$x[''someday''].Month","1","Int32"'
-                '"$x[''someday''].Second","40","Int32"'
-                '"$x[''someday''].Ticks","636823000000000000","Int64"'
-                '"$x[''someday''].TimeOfDay","(...)","TimeSpan"'
-                '"$x[''someday''].TimeOfDay.Ticks","568000000000","Int64"'
-                '"$x[''someday''].TimeOfDay.Days","0","Int32"'
-                '"$x[''someday''].TimeOfDay.Hours","15","Int32"'
-                '"$x[''someday''].TimeOfDay.Milliseconds","0","Int32"'
-                '"$x[''someday''].TimeOfDay.Minutes","46","Int32"'
-                '"$x[''someday''].TimeOfDay.Seconds","40","Int32"'
-                '"$x[''someday''].TimeOfDay.TotalDays","0.657407407407407","Double"'
-                '"$x[''someday''].TimeOfDay.TotalHours","15.7777777777778","Double"'
-                '"$x[''someday''].TimeOfDay.TotalMilliseconds","56800000","Double"'
-                '"$x[''someday''].TimeOfDay.TotalMinutes","946.666666666667","Double"'
-                '"$x[''someday''].TimeOfDay.TotalSeconds","56800","Double"'
-                '"$x[''someday''].Year","2019","Int32"'
-                '"$x[''nil'']","","null"'
-                '"$x.Count","5","Int32"'
-                '"$x.IsReadOnly","False","Boolean"'
-                '"$x.Keys","(...)","OrderedDictionaryKeyValueCollection"'
-                '"$x.Keys (0)","hello","String"'
-                '"$x.Keys (0).Length","5","Int32"'
-                '"$x.Keys (1)","37","Int32"'
-                '"$x.Keys (2)","yarr","String"'
-                '"$x.Keys (2).Length","4","Int32"'
-                '"$x.Keys (3)","someday","String"'
-                '"$x.Keys (3).Length","7","Int32"'
-                '"$x.Keys (4)","nil","String"'
-                '"$x.Keys (4).Length","3","Int32"'
-                '"$x.Keys.Count","5","Int32"'
-                '"$x.Keys.SyncRoot","(...)","Object"'
-                '"$x.Keys.IsSynchronized","False","Boolean"'
-                '"$x.Values","(...)","OrderedDictionaryKeyValueCollection"'
-                '"$x.Values (0)","13","Int32"'
-                '"$x.Values (1)","world!","String"'
-                '"$x.Values (1).Length","6","Int32"'
-                '"$x.Values (2)","(Duplicate)","Object[]"'
-                '"$x.Values (3)","(Duplicate)","DateTime"'
-                '"$x.Values (4)","","null"'
-                '"$x.Values.Count","5","Int32"'
-                '"$x.Values.SyncRoot","(Duplicate)","Object"'
-                '"$x.Values.IsSynchronized","False","Boolean"'
-                '"$x.IsFixedSize","False","Boolean"'
-                '"$x.SyncRoot","(...)","Object"'
-                '"$x.IsSynchronized","False","Boolean"'
+                '"$_","(...)","System.Collections.Specialized.OrderedDictionary"'
+                '"$_[''hello'']","13","System.Int32"'
+                '"$_[''37'']","world!","System.String"'
+                '"$_[''37''].Length","6","System.Int32"'
+                '"$_[''yarr'']","(...)","System.Object[]"'
+                '"$_[''yarr''][0]","y","System.Char"'
+                '"$_[''yarr''][1]","arr","System.String"'
+                '"$_[''yarr''][1].Length","3","System.Int32"'
+                '"$_[''yarr''].Count","2","System.Int32"'
+                '"$_[''yarr''].Length","2","System.Int32"'
+                '"$_[''yarr''].LongLength","2","System.Int64"'
+                '"$_[''yarr''].Rank","1","System.Int32"'
+                '"$_[''yarr''].SyncRoot","(DuplicateHashCode)","System.Object[]"'
+                '"$_[''yarr''].IsReadOnly","False","System.Boolean"'
+                '"$_[''yarr''].IsFixedSize","True","System.Boolean"'
+                '"$_[''yarr''].IsSynchronized","False","System.Boolean"'
+                '"$_[''someday'']","(...)","System.DateTime"'
+                '"$_[''someday''].DisplayHint","DateTime","Microsoft.PowerShell.Commands.DisplayHintType"'
+                '"$_[''someday''].DisplayHint.value__","2","System.Int32"'
+                '"$_[''someday''].DateTime","den 5 januari 2019 15:46:40","System.String"'
+                '"$_[''someday''].DateTime.Length","27","System.Int32"'
+                '"$_[''someday''].Date","(...)","System.DateTime"'
+                '"$_[''someday''].Date.DateTime","den 5 januari 2019 00:00:00","System.String"'
+                '"$_[''someday''].Date.DateTime.Length","27","System.Int32"'
+                '"$_[''someday''].Date.Date","(DuplicateHashCode)","System.DateTime"'
+                '"$_[''someday''].Date.Day","5","System.Int32"'
+                '"$_[''someday''].Date.DayOfWeek","Saturday","System.DayOfWeek"'
+                '"$_[''someday''].Date.DayOfWeek.value__","6","System.Int32"'
+                '"$_[''someday''].Date.DayOfYear","5","System.Int32"'
+                '"$_[''someday''].Date.Hour","0","System.Int32"'
+                '"$_[''someday''].Date.Kind","Unspecified","System.DateTimeKind"'
+                '"$_[''someday''].Date.Kind.value__","0","System.Int32"'
+                '"$_[''someday''].Date.Millisecond","0","System.Int32"'
+                '"$_[''someday''].Date.Minute","0","System.Int32"'
+                '"$_[''someday''].Date.Month","1","System.Int32"'
+                '"$_[''someday''].Date.Second","0","System.Int32"'
+                '"$_[''someday''].Date.Ticks","636822432000000000","System.Int64"'
+                '"$_[''someday''].Date.TimeOfDay","(...)","System.TimeSpan"'
+                '"$_[''someday''].Date.TimeOfDay.Ticks","0","System.Int64"'
+                '"$_[''someday''].Date.TimeOfDay.Days","0","System.Int32"'
+                '"$_[''someday''].Date.TimeOfDay.Hours","0","System.Int32"'
+                '"$_[''someday''].Date.TimeOfDay.Milliseconds","0","System.Int32"'
+                '"$_[''someday''].Date.TimeOfDay.Minutes","0","System.Int32"'
+                '"$_[''someday''].Date.TimeOfDay.Seconds","0","System.Int32"'
+                '"$_[''someday''].Date.TimeOfDay.TotalDays","0","System.Double"'
+                '"$_[''someday''].Date.TimeOfDay.TotalHours","0","System.Double"'
+                '"$_[''someday''].Date.TimeOfDay.TotalMilliseconds","0","System.Double"'
+                '"$_[''someday''].Date.TimeOfDay.TotalMinutes","0","System.Double"'
+                '"$_[''someday''].Date.TimeOfDay.TotalSeconds","0","System.Double"'
+                '"$_[''someday''].Date.Year","2019","System.Int32"'
+                '"$_[''someday''].Day","5","System.Int32"'
+                '"$_[''someday''].DayOfWeek","Saturday","System.DayOfWeek"'
+                '"$_[''someday''].DayOfWeek.value__","6","System.Int32"'
+                '"$_[''someday''].DayOfYear","5","System.Int32"'
+                '"$_[''someday''].Hour","15","System.Int32"'
+                '"$_[''someday''].Kind","Unspecified","System.DateTimeKind"'
+                '"$_[''someday''].Kind.value__","0","System.Int32"'
+                '"$_[''someday''].Millisecond","0","System.Int32"'
+                '"$_[''someday''].Minute","46","System.Int32"'
+                '"$_[''someday''].Month","1","System.Int32"'
+                '"$_[''someday''].Second","40","System.Int32"'
+                '"$_[''someday''].Ticks","636823000000000000","System.Int64"'
+                '"$_[''someday''].TimeOfDay","(...)","System.TimeSpan"'
+                '"$_[''someday''].TimeOfDay.Ticks","568000000000","System.Int64"'
+                '"$_[''someday''].TimeOfDay.Days","0","System.Int32"'
+                '"$_[''someday''].TimeOfDay.Hours","15","System.Int32"'
+                '"$_[''someday''].TimeOfDay.Milliseconds","0","System.Int32"'
+                '"$_[''someday''].TimeOfDay.Minutes","46","System.Int32"'
+                '"$_[''someday''].TimeOfDay.Seconds","40","System.Int32"'
+                '"$_[''someday''].TimeOfDay.TotalDays","0.657407407407407","System.Double"'
+                '"$_[''someday''].TimeOfDay.TotalHours","15.7777777777778","System.Double"'
+                '"$_[''someday''].TimeOfDay.TotalMilliseconds","56800000","System.Double"'
+                '"$_[''someday''].TimeOfDay.TotalMinutes","946.666666666667","System.Double"'
+                '"$_[''someday''].TimeOfDay.TotalSeconds","56800","System.Double"'
+                '"$_[''someday''].Year","2019","System.Int32"'
+                '"$_[''nil'']","",'
+                '"$_.Count","5","System.Int32"'
+                '"$_.IsReadOnly","False","System.Boolean"'
+                '"$_.Keys","(...)","System.Collections.Specialized.OrderedDictionary+OrderedDictionaryKeyValueCollection"'
+                '"$_.Keys (0)","hello","System.String"'
+                '"$_.Keys (0).Length","5","System.Int32"'
+                '"$_.Keys (1)","37","System.Int32"'
+                '"$_.Keys (2)","yarr","System.String"'
+                '"$_.Keys (2).Length","4","System.Int32"'
+                '"$_.Keys (3)","someday","System.String"'
+                '"$_.Keys (3).Length","7","System.Int32"'
+                '"$_.Keys (4)","nil","System.String"'
+                '"$_.Keys (4).Length","3","System.Int32"'
+                '"$_.Keys.Count","5","System.Int32"'
+                '"$_.Keys.SyncRoot","(...)","System.Object"'
+                '"$_.Keys.IsSynchronized","False","System.Boolean"'
+                '"$_.Values","(...)","System.Collections.Specialized.OrderedDictionary+OrderedDictionaryKeyValueCollection"'
+                '"$_.Values (0)","13","System.Int32"'
+                '"$_.Values (1)","world!","System.String"'
+                '"$_.Values (1).Length","6","System.Int32"'
+                '"$_.Values (2)","(DuplicateHashCode)","System.Object[]"'
+                '"$_.Values (3)","(DuplicateHashCode)","System.DateTime"'
+                '"$_.Values (4)","",'
+                '"$_.Values.Count","5","System.Int32"'
+                '"$_.Values.SyncRoot","(DuplicateHashCode)","System.Object"'
+                '"$_.Values.IsSynchronized","False","System.Boolean"'
+                '"$_.IsFixedSize","False","System.Boolean"'
+                '"$_.SyncRoot","(...)","System.Object"'
+                '"$_.IsSynchronized","False","System.Boolean"'
             ) -join ','
 
             $actualWithParameter = Get-ObjectDetail -InputObject $object

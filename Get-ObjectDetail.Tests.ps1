@@ -119,7 +119,7 @@ Describe 'Is -SimpleType' {
     }
 
     Context "Given enum" {
-        It "some" {
+        It "Returns True" {
             Is (Get-Date).DayOfWeek -SimpleType | Should Be $true
         }
     }
@@ -255,6 +255,20 @@ Describe 'WriteObject' {
     }
 }
 
+Describe 'IsFilterMatch' {
+    Context 'Given a list of filters and a value' {
+        It 'Returns True if it is included' {
+            $filters = 'one_included', 'include_wildcard_*'
+
+            'one_included' | IsFilterMatch -Filter $filters | Should Be $true
+            'include_wildcard_abc' | IsFilterMatch -Filter $filters | Should Be $true
+            'include_wildcard_xyz' | IsFilterMatch -Filter $filters | Should Be $true
+            
+            'not_included' | IsFilterMatch -Filter $filters | Should Be $false
+        }
+    }
+}
+
 Describe 'Get-ObjectDetail' {
     #todo: test columns separately with | select Col to make tests less brittle?
     Context 'Given int' {
@@ -340,6 +354,20 @@ Describe 'Get-ObjectDetail' {
             ) -join ','
 
             $actual = Get-ObjectDetail -InputObject $object -Depth 1
+
+            ,$actual | ConvertToCsvString | Should Be $expected
+        }
+    }
+
+    Context 'Given wildcard array of properties to exclude' {
+        It 'Returns all the other properties' {
+            $expected = @(
+                '"$_","(...)","System.DateTime"'
+                '"$_.Hour","21","System.Int32"'
+                '"$_.Year","2019","System.Int32"'
+            ) -join ','
+
+            $actual = (Get-Date -Hour 21 -Year 2019) | Get-ObjectDetail -ExcludeProperty *t*, *d*
 
             ,$actual | ConvertToCsvString | Should Be $expected
         }

@@ -93,6 +93,7 @@ function IsSimple {
 }
 #>
 
+<#
 function IsIgnored {
     [CmdletBinding()]
     param($InputObject)
@@ -102,6 +103,51 @@ function IsIgnored {
 
     $null -ne $InputObject -and
     $InputObject.GetType().FullName -match $ignoreTypePattern
+}
+#>
+
+function IsFilterMatch {
+    [CmdletBinding()]
+    param(
+        [parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [AllowEmptyString()]
+        [Alias('Name')]
+        [string]$InputObject,
+
+        [parameter(Mandatory)]
+        [AllowEmptyString()]
+        [AllowNull()]
+        [string[]]$Filter
+    )
+
+    begin {}
+    process {
+        foreach ($filt in $Filter) {
+            if ($InputObject -like $filt) {
+                return $true
+            }
+        }
+
+        return $false
+    }
+    end {}
+}
+
+function IsIgnored {
+    [CmdletBinding()]
+    param(
+        [parameter(Mandatory)]
+        [AllowNull()]
+        $InputObject,
+
+        [parameter(Mandatory)]
+        [AllowEmptyString()]
+        [AllowNull()]
+        [string[]]$Filter
+    )
+
+    $null -ne $InputObject -and
+    ($InputObject.GetType().FullName | IsFilterMatch -Filter $Filter)
 }
 
 #determine if string ends with a property cycle repeated $Count times, to avoid infinitely recursive types
@@ -157,7 +203,8 @@ function ObjDetail {
         [int]$Level,
         [int]$Depth,
         [System.Collections.Generic.HashSet[int]]$HashCodes,
-        [string[]]$ExcludeProperty
+        [string[]]$ExcludeProperty,
+        [string[]]$ExcludeType
     )
 
     $object = $InputObject
@@ -175,7 +222,7 @@ function ObjDetail {
     }
 
     #configurable?
-    if (IsIgnored -InputObject $object) {
+    if (IsIgnored -InputObject $object -Filter $ExcludeType) {
         Write-Verbose "$cmdName, ignored: $Name"
         if ($DebugPreference) {
             WriteObject -Name $Name -InputObject $object -CustomValue "(Ignored)"
@@ -236,12 +283,26 @@ function ObjDetail {
         Depth           = $Depth
         HashCodes       = $HashCodes
         ExcludeProperty = $ExcludeProperty
+        ExcludeType     = $ExcludeType
     }
 
     #recursive stuff
     if (Is $object -Enumerable) {
+        try {
+            $enumerator = $object.GetEnumerator()
+        }
+        catch {
+            #some enumerable types don't have .GetEnumerator()
+            #e.g. (Get-ChildItem -File | select -first 1).PSDrive.Provider.ImplementingType.DeclaredNestedTypes
+            if ($DebugPreference) {
+                WriteObject -InputObject $object -Name $Name -CustomValue "(GetEnumerator)"
+            }
+
+            $enumerator = $object
+        }
+        
         $i = 0
-        foreach ($item in $object.GetEnumerator()) {
+        foreach ($item in $enumerator) {
             if (Is $object -Dictionary) {
                 $index = $item.Key
                 $value = $item.Value
@@ -264,7 +325,8 @@ function ObjDetail {
         }
     }
 
-    $properties = $object.psobject.Properties | Where-Object { $_.Name -notin $ExcludeProperty }
+    #$properties = $object.psobject.Properties | Where-Object { $_.Name -notin $ExcludeProperty }
+    $properties = $object.psobject.Properties | Where-Object { -not ($_ | IsFilterMatch -Filter $ExcludeProperty) }
     foreach ($prop in $properties) {
         $index = $prop.Name
         $value = $prop.Value
@@ -274,9 +336,16 @@ function ObjDetail {
     }
 
     if ($DebugPreference) {
-        $propertiesExcluded = $object.psobject.Properties | Where-Object { $_.Name -in $ExcludeProperty }
         #Write-Verbose "$cmdName, ExcludedProperty: $Name"
-        WriteObject -Name $newName -InputObject $value -CustomValue '(ExcludedProperty)'
+        #$propertiesExcluded = $object.psobject.Properties | Where-Object { $_.Name -in $ExcludeProperty }
+        $propertiesExcluded = $object.psobject.Properties | Where-Object { ($_ | IsFilterMatch -Filter $ExcludeProperty) }
+        foreach ($prop in $propertiesExcluded) {
+            $index = $prop.Name
+            $value = $prop.Value
+            $newName = "$Name.$index"
+
+            WriteObject -Name $newName -InputObject $value -CustomValue '(ExcludedProperty)'
+        }
     }
 }
 
@@ -287,8 +356,10 @@ function Get-ObjectDetail {
         [parameter(ValueFromPipeline)]$InputObject,
         [string]$Name = '$_',
         [int]$Depth = 10,
-        [string[]]$ExcludeProperty
-        #todo: $ExcludeTypes?
+        #todo: [string[]]$IncludeProperty,
+        [string[]]$ExcludeProperty,
+        [AllowEmptyString()]
+        [string[]]$ExcludeType = ('System.Reflection.*', 'System.RunTime*')
     )
 
     begin {
@@ -298,6 +369,7 @@ function Get-ObjectDetail {
             Depth           = $Depth
             HashCodes       = [System.Collections.Generic.HashSet[int]]::new()
             ExcludeProperty = $ExcludeProperty
+            ExcludeType     = $ExcludeType
         }
     }
     process {

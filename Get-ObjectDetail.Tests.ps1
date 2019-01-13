@@ -2,11 +2,10 @@
 #date: 2019-01-05
 
 . ($PSCommandPath -replace '\.Tests\.ps1', '.ps1')
-#Remove-Module GetObjectDetail
-#Import-Module GetObjectDetail
+#Import-Module GetObjectDetail -Force
 
 #helper function for output comparison and creating test arrays
-#input: Get-ObjectDetail output
+#input: output from Get-ObjectDetail
 function ConvertToCsvString {
     param(
         [parameter(ValueFromPipeline)]$InputObject,
@@ -36,16 +35,17 @@ function ConvertToCsvString {
     }
 }
 
+
 Describe 'Is -Enumerable' {
     #todo: split into separate tests
     Context 'Given an IEnumerable (array/hashtable/list)' {
         It 'Returns True' {
-            Is @() -Enumerable | Should Be $true
             Is @{} -Enumerable | Should Be $true
+            Is @(1, 2, 3) -Enumerable | Should Be $true
             Is ([System.Collections.Generic.List[int]]::new()) -Enumerable | Should Be $true
-            
-            Is -Enumerable @() | Should Be $true
+
             Is -Enumerable @{} | Should Be $true
+            Is -Enumerable @(1, 2, 3) | Should Be $true
             Is -Enumerable ([System.Collections.Generic.List[int]]::new()) | Should Be $true
         }
     }
@@ -53,8 +53,6 @@ Describe 'Is -Enumerable' {
     Context 'Given an enumerable type (string) which we want to treat as a value' {
         It 'Returns False' {
             Is "special case" -Enumerable | Should Be $false
-    
-            Is -Enumerable "special case" | Should Be $false
         }
     }
     
@@ -63,39 +61,26 @@ Describe 'Is -Enumerable' {
             Is $null -Enumerable | Should Be $false
             Is 42 -Enumerable | Should Be $false
             Is (Get-Date) -Enumerable | Should Be $false
-    
-            Is -Enumerable $null | Should Be $false
-            Is -Enumerable 42 | Should Be $false
-            Is -Enumerable (Get-Date) | Should Be $false
         }
     }
 }
+
 
 Describe 'Is -Dictionary' {
     Context 'Given a dictionary (hashtable)' {
         It 'Returns True' {
             Is @{ a = 42 } -Dictionary | Should Be $true
-
-            Is -Dictionary @{ a = 42 } | Should Be $true
         }
     }
 
     Context 'Given a non-dictionary (hashset)' {
         It 'Returns False' {
-            Is -Dictionary ([System.Collections.Generic.HashSet[string]]::new()) | Should Be $false
-
             Is ([System.Collections.Generic.HashSet[string]]::new()) -Dictionary | Should Be $false
         }
     }
 
-    #todo: split into separate tests
     Context 'Given a non-dictionary (null/array/int/string)' {
         It 'Returns False' {
-            Is -Dictionary $null | Should Be $false
-            Is -Dictionary @('42') | Should Be $false
-            Is -Dictionary 42 | Should Be $false
-            Is -Dictionary "str" | Should Be $false
-
             Is $null -Dictionary | Should Be $false
             Is @('42') -Dictionary | Should Be $false
             Is 42 -Dictionary | Should Be $false
@@ -104,14 +89,10 @@ Describe 'Is -Dictionary' {
     }
 }
 
+
 Describe 'Is -SimpleType' {
-    #todo: split into separate tests
     Context "Given a 'simple/value/primitive' type (null/int/string)" {
         It "Returns True" {
-            Is -SimpleType $null | Should Be $true
-            Is -SimpleType 42 | Should Be $true
-            Is -SimpleType "str" | Should Be $true
-
             Is $null -SimpleType | Should Be $true
             Is 42 -SimpleType | Should Be $true
             Is "str" -SimpleType | Should Be $true
@@ -126,12 +107,6 @@ Describe 'Is -SimpleType' {
 
     Context 'Given complex type (array/hashtable/guid/intarray/timespan)' {
         It 'Returns False' {
-            Is -SimpleType @('a', 1) | Should Be $false
-            Is -SimpleType @{ 'a' = 1 } | Should Be $false
-            Is -SimpleType (New-Guid) | Should Be $false
-            Is -SimpleType ([int[]](12, 34)) | Should Be $false
-            Is -SimpleType ([timespan]::new(1)) | Should Be $false
-
             Is @('a', 1) -SimpleType | Should Be $false
             Is @{ 'a' = 1 } -SimpleType | Should Be $false
             Is (New-Guid) -SimpleType | Should Be $false
@@ -141,14 +116,10 @@ Describe 'Is -SimpleType' {
     }
 }
 
+
 Describe 'Is -Indexable' {
-    #todo: split into separate tests
     Context 'Given a type which is indexable with integers (string/array/intArray)' {
         It 'Returns True' {
-            Is -Indexable "str" | Should Be $true
-            Is -Indexable @('a', 1) | Should Be $true
-            Is -Indexable ([int[]](12, 34)) | Should Be $true
-
             Is "str" -Indexable | Should Be $true
             Is @('a', 1) -Indexable | Should Be $true
             Is ([int[]](12, 34)) -Indexable | Should Be $true
@@ -157,11 +128,6 @@ Describe 'Is -Indexable' {
 
     Context 'Given a type that cannot be indexable with integers (null/dictionary/hashset/int)' {
         It 'Returns False' {
-            Is -Indexable $null | Should Be $false
-            Is -Indexable @{ 'a' = 1 } | Should Be $false
-            Is -Indexable ([System.Collections.Generic.HashSet[string]]) | Should Be $false
-            Is -Indexable 42 | Should Be $false
-
             Is $null -Indexable | Should Be $false
             Is @{ 'a' = 1 } -Indexable | Should Be $false
             Is ([System.Collections.Generic.HashSet[string]]) -Indexable | Should Be $false
@@ -169,6 +135,7 @@ Describe 'Is -Indexable' {
         }
     }
 }
+
 
 Describe 'Is -PSCustomObjectHashCode' {
     Context 'Given a PSCustomObject' {
@@ -186,6 +153,7 @@ Describe 'Is -PSCustomObjectHashCode' {
         }
     }
 }
+
 
 <#
 Describe 'HasPropertyCycle' {
@@ -222,6 +190,7 @@ Describe 'HasPropertyCycle' {
 }
 #>
 
+
 Describe 'WriteObject' {
     #i should really write my own comparison and ditch ConvertToCsvString.. maybe?
     Context 'Given an object with value' {
@@ -255,16 +224,118 @@ Describe 'WriteObject' {
     }
 }
 
-Describe 'IsFilterMatch' {
+
+Describe 'FilterPredicate (help function)' {
+    Context 'I have double checked all these behaviours' {
+        It 'Should be True' {
+            $false | Should Be $true
+        }
+    }
+
     Context 'Given a list of filters and a value' {
         It 'Returns True if it is included' {
             $filters = 'one_included', 'include_wildcard_*'
 
-            'one_included' | IsFilterMatch -Filter $filters | Should Be $true
-            'include_wildcard_abc' | IsFilterMatch -Filter $filters | Should Be $true
-            'include_wildcard_xyz' | IsFilterMatch -Filter $filters | Should Be $true
+            'one_included' | FilterPredicate -Filter $filters | Should Be $true
+            'include_wildcard_abc' | FilterPredicate -Filter $filters | Should Be $true
+            'include_wildcard_xyz' | FilterPredicate -Filter $filters | Should Be $true
             
-            'not_included' | IsFilterMatch -Filter $filters | Should Be $false
+            'not_included' | FilterPredicate -Filter $filters | Should Be $false
+        }
+    }
+
+    Context 'Given null (missing) filter' {
+        It 'Returns True always' {
+            "hejsan" | FilterPredicate -Filter $null | Should Be $true
+            '' | FilterPredicate -Filter $null | Should Be $true
+        }
+    }
+
+    Context 'Given empty string filter' {
+        It 'Returns True only for empty string' {
+            '' | FilterPredicate -Filter '' | Should Be $true
+
+            "hejsan" | FilterPredicate -Filter '' | Should Be $false
+        }
+    }
+}
+
+
+Describe 'IncludeExcludeFilter' {
+    Context 'I have double checked all these behaviours' {
+        It 'Should be True' {
+            $false | Should Be $true
+        }
+    }
+
+    Context 'Given -Include and -Exclude wildcard array filters' {
+        It 'Returns True for strings matching Include but not Exclude' {
+            ('inc'   | IncludeExcludeFilter -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $true
+            ('bash'  | IncludeExcludeFilter -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $true
+            ('cash'  | IncludeExcludeFilter -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $true
+
+            ('dummy' | IncludeExcludeFilter -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $false
+            ('ask'   | IncludeExcludeFilter -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $false
+            ('gas'   | IncludeExcludeFilter -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $false
+        }
+    }
+
+    Context 'Given no filters' {
+        It 'Returns true for all strings' {
+            ('harry s' | IncludeExcludeFilter) | Should Be $true
+            (''        | IncludeExcludeFilter) | Should Be $true
+
+            ('okapi'   | IncludeExcludeFilter -Exclude '') | Should Be $true
+        }
+    }
+
+    Context 'Given empty string -Include filter' {
+        It 'Returns true for empty string' {
+            (''        | IncludeExcludeFilter -Include '') | Should Be $true
+
+            ('niagara' | IncludeExcludeFilter -Include '') | Should Be $false
+        }
+    }
+
+    Context 'Given null (missing) -Include filter' {
+        It 'Returns true for all strings' {
+            (''        | IncludeExcludeFilter -Include $null) | Should Be $true
+            ('truce'   | IncludeExcludeFilter -Include $null) | Should Be $true
+       }
+    }
+
+    Context 'Given one -Include wildcard filter' {
+        It 'Returns True if matching the filter' {
+            ('bash' | IncludeExcludeFilter -Include '*as*') | Should Be $true
+            ('cash' | IncludeExcludeFilter -Include '*as*') | Should Be $true
+
+            ('nope' | IncludeExcludeFilter -Include '*as*') | Should Be $false
+        }
+    }
+
+    Context 'Given multiple -Include wildcard filters' {
+        It 'Returns True if matching any filter' {
+            ('bash' | IncludeExcludeFilter -Include 'ba*', 'ca*') | Should Be $true
+            ('cash' | IncludeExcludeFilter -Include 'ba*', 'ca*') | Should Be $true
+
+            ('nope' | IncludeExcludeFilter -Include 'ba*', 'ca*') | Should Be $false
+        }
+    }
+
+    Context 'Given one -Exclude wildcard filter' {
+        It 'Returns False if matching the filter' {
+            ('mash' | IncludeExcludeFilter -Exclude '*sh') | Should Be $false
+
+            ('yay!' | IncludeExcludeFilter -Exclude '*sh') | Should Be $true
+        }
+    }
+
+    Context 'Given multiple -Exclude wildcard filters' {
+        It 'Returns False if matching any filter' {
+            ('bash' | IncludeExcludeFilter -Exclude 'ba*', 'ca*') | Should Be $false
+            ('cash' | IncludeExcludeFilter -Exclude 'ba*', 'ca*') | Should Be $false
+
+            ('yay!' | IncludeExcludeFilter -Exclude 'ba*', 'ca*') | Should Be $true
         }
     }
 }

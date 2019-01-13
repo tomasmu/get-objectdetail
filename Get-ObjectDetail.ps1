@@ -106,22 +106,27 @@ function IsIgnored {
 }
 #>
 
-function IsFilterMatch {
+function FilterPredicate {
     [CmdletBinding()]
     param(
         [parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [AllowEmptyString()]
+        [AllowNull()]
         [Alias('Name')]
         [string]$InputObject,
 
         [parameter(Mandatory)]
         [AllowEmptyString()]
-        [AllowNull()]
+        [AllowNull()] #here or in calling function?
         [string[]]$Filter
     )
 
     begin {}
     process {
+        if ($null -eq $Filter) {
+            return $true
+        }
+
         foreach ($filt in $Filter) {
             if ($InputObject -like $filt) {
                 return $true
@@ -133,6 +138,33 @@ function IsFilterMatch {
     end {}
 }
 
+function IncludeExcludeFilter {
+    param(
+        [parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [AllowEmptyString()]
+        [AllowNull()]
+        [Alias('FullName', 'Name')]
+        [string]$InputObject,
+
+        [string[]]$Include,
+        
+        [string[]]$Exclude
+    )
+
+    #include null or missing = show everything
+    #exclude null or missing = exclude nothing = show everything
+    $includeNullOrMissing = ($null -eq $Include) -or (-not $PSBoundParameters.ContainsKey('Include'))
+    $excludeNullOrMissing = ($null -eq $Exclude) -or (-not $PSBoundParameters.ContainsKey('Exclude'))
+
+    $isIncluded = ($InputObject | FilterPredicate -Filter $Include)
+    $isExcluded = ($InputObject | FilterPredicate -Filter $Exclude)
+
+    #
+    ($includeNullOrMissing -or $isIncluded) -and
+    ($excludeNullOrMissing -or -not $isExcluded)
+}
+
+<#
 function IsIgnored {
     [CmdletBinding()]
     param(
@@ -147,10 +179,29 @@ function IsIgnored {
     )
 
     $null -ne $InputObject -and
-    ($InputObject.GetType().FullName | IsFilterMatch -Filter $Filter)
+    ($InputObject.GetType().FullName | FilterPredicate -Filter $Filter)
+}
+#>
+
+function IsIgnoredType {
+    [CmdletBinding()]
+    param(
+        [parameter(Mandatory)]
+        [AllowNull()]
+        $InputObject,
+
+        [parameter(Mandatory)]
+        [AllowEmptyString()]
+        [AllowNull()]
+        [string[]]$ExcludeType
+    )
+
+    $null -ne $InputObject -and
+    -not ($InputObject.GetType() | IncludeExcludeFilter -Exclude $ExcludeType)
 }
 
 #determine if string ends with a property cycle repeated $Count times, to avoid infinitely recursive types
+#e.g. $x.prop.prop.prop (3 repeats) or $x.a.b.c.a.b.c (2 repeats)
 #i cannot always find duplicates with GetHashCode(), it returns random values on certain types
 <#slightly bad workaround so it's not in use yet, there has to be a better way!
 function HasPropertyCycle {
@@ -203,6 +254,7 @@ function ObjDetail {
         [int]$Level,
         [int]$Depth,
         [System.Collections.Generic.HashSet[int]]$HashCodes,
+        [string[]]$IncludeProperty,
         [string[]]$ExcludeProperty,
         [string[]]$ExcludeType
     )
@@ -221,8 +273,8 @@ function ObjDetail {
         return
     }
 
-    #configurable?
-    if (IsIgnored -InputObject $object -Filter $ExcludeType) {
+    #if (IsIgnored -InputObject $object -Filter $ExcludeType) {
+    if (IsIgnoredType -InputObject $object -ExcludeType $ExcludeType) {
         Write-Verbose "$cmdName, ignored: $Name"
         if ($DebugPreference) {
             WriteObject -Name $Name -InputObject $object -CustomValue "(Ignored)"
@@ -282,6 +334,7 @@ function ObjDetail {
         Level           = $Level + 1
         Depth           = $Depth
         HashCodes       = $HashCodes
+        IncludeProperty = $IncludeProperty
         ExcludeProperty = $ExcludeProperty
         ExcludeType     = $ExcludeType
     }
@@ -326,7 +379,8 @@ function ObjDetail {
     }
 
     #$properties = $object.psobject.Properties | Where-Object { $_.Name -notin $ExcludeProperty }
-    $properties = $object.psobject.Properties | Where-Object { -not ($_ | IsFilterMatch -Filter $ExcludeProperty) }
+    #$properties = $object.psobject.Properties | Where-Object { -not ($_ | FilterPredicate -Filter $ExcludeProperty) }
+    $properties = $object.psobject.Properties | Where-Object { $_ | IncludeExcludeFilter -Include $IncludeProperty -Exclude $ExcludeProperty }
     foreach ($prop in $properties) {
         $index = $prop.Name
         $value = $prop.Value
@@ -338,7 +392,8 @@ function ObjDetail {
     if ($DebugPreference) {
         #Write-Verbose "$cmdName, ExcludedProperty: $Name"
         #$propertiesExcluded = $object.psobject.Properties | Where-Object { $_.Name -in $ExcludeProperty }
-        $propertiesExcluded = $object.psobject.Properties | Where-Object { ($_ | IsFilterMatch -Filter $ExcludeProperty) }
+        #$propertiesExcluded = $object.psobject.Properties | Where-Object { ($_ | FilterPredicate -Filter $ExcludeProperty) }
+        $propertiesExcluded = $object.psobject.Properties | Where-Object { $_ | IncludeExcludeFilter -Include $IncludeProperty -Exclude $ExcludeProperty }
         foreach ($prop in $propertiesExcluded) {
             $index = $prop.Name
             $value = $prop.Value
@@ -353,11 +408,17 @@ function ObjDetail {
 function Get-ObjectDetail {
     [CmdletBinding()]
     param(
-        [parameter(ValueFromPipeline)]$InputObject,
+        [parameter(ValueFromPipeline)]
+        $InputObject,
+
         [string]$Name = '$_',
+
         [int]$Depth = 10,
-        #todo: [string[]]$IncludeProperty,
+        
+        [string[]]$IncludeProperty,
         [string[]]$ExcludeProperty,
+
+        #todo: [string[]]$IncludeType,
         [AllowEmptyString()]
         [string[]]$ExcludeType = ('System.Reflection.*', 'System.RunTime*')
     )
@@ -368,6 +429,7 @@ function Get-ObjectDetail {
             Level           = 0
             Depth           = $Depth
             HashCodes       = [System.Collections.Generic.HashSet[int]]::new()
+            IncludeProperty = $IncludeProperty
             ExcludeProperty = $ExcludeProperty
             ExcludeType     = $ExcludeType
         }

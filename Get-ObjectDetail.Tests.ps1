@@ -226,12 +226,6 @@ Describe 'WriteObject' {
 
 
 Describe 'FilterPredicate (help function)' {
-    Context 'I have double checked all these behaviours' {
-        It 'Should be True' {
-            $false | Should Be $true
-        }
-    }
-
     Context 'Given a list of filters and a value' {
         It 'Returns True if it is included' {
             $filters = 'one_included', 'include_wildcard_*'
@@ -261,81 +255,83 @@ Describe 'FilterPredicate (help function)' {
 }
 
 
-Describe 'IncludeExcludeFilter' {
-    Context 'I have double checked all these behaviours' {
-        It 'Should be True' {
+Describe 'IncludeType/ExcludeType' {
+    Context 'Given string array with wildcards' {
+        It 'todo: tests' {
             $false | Should Be $true
         }
     }
+}
 
+Describe 'IncludeExcludePredicate' {
     Context 'Given -Include and -Exclude wildcard array filters' {
         It 'Returns True for strings matching Include but not Exclude' {
-            ('inc'   | IncludeExcludeFilter -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $true
-            ('bash'  | IncludeExcludeFilter -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $true
-            ('cash'  | IncludeExcludeFilter -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $true
+            ('inc'   | IncludeExcludePredicate -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $true
+            ('bash'  | IncludeExcludePredicate -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $true
+            ('cash'  | IncludeExcludePredicate -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $true
 
-            ('dummy' | IncludeExcludeFilter -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $false
-            ('ask'   | IncludeExcludeFilter -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $false
-            ('gas'   | IncludeExcludeFilter -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $false
+            ('dummy' | IncludeExcludePredicate -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $false
+            ('ask'   | IncludeExcludePredicate -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $false
+            ('gas'   | IncludeExcludePredicate -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $false
         }
     }
 
     Context 'Given no filters' {
         It 'Returns true for all strings' {
-            ('harry s' | IncludeExcludeFilter) | Should Be $true
-            (''        | IncludeExcludeFilter) | Should Be $true
+            ('harry s' | IncludeExcludePredicate) | Should Be $true
+            (''        | IncludeExcludePredicate) | Should Be $true
 
-            ('okapi'   | IncludeExcludeFilter -Exclude '') | Should Be $true
+            ('okapi'   | IncludeExcludePredicate -Exclude '') | Should Be $true
         }
     }
 
     Context 'Given empty string -Include filter' {
         It 'Returns true for empty string' {
-            (''        | IncludeExcludeFilter -Include '') | Should Be $true
+            (''        | IncludeExcludePredicate -Include '') | Should Be $true
 
-            ('niagara' | IncludeExcludeFilter -Include '') | Should Be $false
+            ('niagara' | IncludeExcludePredicate -Include '') | Should Be $false
         }
     }
 
     Context 'Given null (missing) -Include filter' {
         It 'Returns true for all strings' {
-            (''        | IncludeExcludeFilter -Include $null) | Should Be $true
-            ('truce'   | IncludeExcludeFilter -Include $null) | Should Be $true
+            (''        | IncludeExcludePredicate -Include $null) | Should Be $true
+            ('truce'   | IncludeExcludePredicate -Include $null) | Should Be $true
        }
     }
 
     Context 'Given one -Include wildcard filter' {
         It 'Returns True if matching the filter' {
-            ('bash' | IncludeExcludeFilter -Include '*as*') | Should Be $true
-            ('cash' | IncludeExcludeFilter -Include '*as*') | Should Be $true
+            ('bash' | IncludeExcludePredicate -Include '*as*') | Should Be $true
+            ('cash' | IncludeExcludePredicate -Include '*as*') | Should Be $true
 
-            ('nope' | IncludeExcludeFilter -Include '*as*') | Should Be $false
+            ('nope' | IncludeExcludePredicate -Include '*as*') | Should Be $false
         }
     }
 
     Context 'Given multiple -Include wildcard filters' {
         It 'Returns True if matching any filter' {
-            ('bash' | IncludeExcludeFilter -Include 'ba*', 'ca*') | Should Be $true
-            ('cash' | IncludeExcludeFilter -Include 'ba*', 'ca*') | Should Be $true
+            ('bash' | IncludeExcludePredicate -Include 'ba*', 'ca*') | Should Be $true
+            ('cash' | IncludeExcludePredicate -Include 'ba*', 'ca*') | Should Be $true
 
-            ('nope' | IncludeExcludeFilter -Include 'ba*', 'ca*') | Should Be $false
+            ('nope' | IncludeExcludePredicate -Include 'ba*', 'ca*') | Should Be $false
         }
     }
 
     Context 'Given one -Exclude wildcard filter' {
         It 'Returns False if matching the filter' {
-            ('mash' | IncludeExcludeFilter -Exclude '*sh') | Should Be $false
+            ('mash' | IncludeExcludePredicate -Exclude '*sh') | Should Be $false
 
-            ('yay!' | IncludeExcludeFilter -Exclude '*sh') | Should Be $true
+            ('yay!' | IncludeExcludePredicate -Exclude '*sh') | Should Be $true
         }
     }
 
     Context 'Given multiple -Exclude wildcard filters' {
         It 'Returns False if matching any filter' {
-            ('bash' | IncludeExcludeFilter -Exclude 'ba*', 'ca*') | Should Be $false
-            ('cash' | IncludeExcludeFilter -Exclude 'ba*', 'ca*') | Should Be $false
+            ('bash' | IncludeExcludePredicate -Exclude 'ba*', 'ca*') | Should Be $false
+            ('cash' | IncludeExcludePredicate -Exclude 'ba*', 'ca*') | Should Be $false
 
-            ('yay!' | IncludeExcludeFilter -Exclude 'ba*', 'ca*') | Should Be $true
+            ('yay!' | IncludeExcludePredicate -Exclude 'ba*', 'ca*') | Should Be $true
         }
     }
 }

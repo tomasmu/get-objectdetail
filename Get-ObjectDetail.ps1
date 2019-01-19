@@ -2,9 +2,6 @@
 #date: 2019-01-05
 
 #some helper functions..
-
-#todo: suggestion, move the Is* functions into one
-#then use like this: $object | Test -IsEnumerable
 function Is {
     [CmdletBinding()]
     param(
@@ -93,19 +90,6 @@ function IsSimple {
 }
 #>
 
-<#
-function IsIgnored {
-    [CmdletBinding()]
-    param($InputObject)
-    
-    #reflection can really get out of hand
-    $ignoreTypePattern = '^System\.Reflection|^System\.Runtime'
-
-    $null -ne $InputObject -and
-    $InputObject.GetType().FullName -match $ignoreTypePattern
-}
-#>
-
 function FilterPredicate {
     [CmdletBinding()]
     param(
@@ -138,7 +122,7 @@ function FilterPredicate {
     end {}
 }
 
-function IncludeExcludeFilter {
+function IncludeExcludePredicate {
     param(
         [parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
         [AllowEmptyString()]
@@ -151,37 +135,12 @@ function IncludeExcludeFilter {
         [string[]]$Exclude
     )
 
-    #include null or missing = show everything
-    #exclude null or missing = exclude nothing = show everything
-    $includeNullOrMissing = ($null -eq $Include) -or (-not $PSBoundParameters.ContainsKey('Include'))
-    $excludeNullOrMissing = ($null -eq $Exclude) -or (-not $PSBoundParameters.ContainsKey('Exclude'))
-
     $isIncluded = ($InputObject | FilterPredicate -Filter $Include)
     $isExcluded = ($InputObject | FilterPredicate -Filter $Exclude)
 
-    #
-    ($includeNullOrMissing -or $isIncluded) -and
-    ($excludeNullOrMissing -or -not $isExcluded)
+    (($null -eq $Include) -or $isIncluded) -and
+    (($null -eq $Exclude) -or -not $isExcluded)
 }
-
-<#
-function IsIgnored {
-    [CmdletBinding()]
-    param(
-        [parameter(Mandatory)]
-        [AllowNull()]
-        $InputObject,
-
-        [parameter(Mandatory)]
-        [AllowEmptyString()]
-        [AllowNull()]
-        [string[]]$Filter
-    )
-
-    $null -ne $InputObject -and
-    ($InputObject.GetType().FullName | FilterPredicate -Filter $Filter)
-}
-#>
 
 function IsIgnoredType {
     [CmdletBinding()]
@@ -193,11 +152,16 @@ function IsIgnoredType {
         [parameter(Mandatory)]
         [AllowEmptyString()]
         [AllowNull()]
+        [string[]]$IncludeType,
+        
+        [parameter(Mandatory)]
+        [AllowEmptyString()]
+        [AllowNull()]
         [string[]]$ExcludeType
     )
 
     $null -ne $InputObject -and
-    -not ($InputObject.GetType() | IncludeExcludeFilter -Exclude $ExcludeType)
+    -not ($InputObject.GetType() | IncludeExcludePredicate -Exclude $ExcludeType)
 }
 
 #determine if string ends with a property cycle repeated $Count times, to avoid infinitely recursive types
@@ -248,7 +212,6 @@ function WriteObject {
 function ObjDetail {
     [CmdletBinding()]
     param(
-        #[Parameter(ValueFromPipeline)]
         $InputObject,
         [string]$Name,
         [int]$Level,
@@ -256,6 +219,7 @@ function ObjDetail {
         [System.Collections.Generic.HashSet[int]]$HashCodes,
         [string[]]$IncludeProperty,
         [string[]]$ExcludeProperty,
+        [string[]]$IncludeType,
         [string[]]$ExcludeType
     )
 
@@ -273,8 +237,7 @@ function ObjDetail {
         return
     }
 
-    #if (IsIgnored -InputObject $object -Filter $ExcludeType) {
-    if (IsIgnoredType -InputObject $object -ExcludeType $ExcludeType) {
+    if (IsIgnoredType -InputObject $object -IncludeType $IncludeType -ExcludeType $ExcludeType) {
         Write-Verbose "$cmdName, ignored: $Name"
         if ($DebugPreference) {
             WriteObject -Name $Name -InputObject $object -CustomValue "(Ignored)"
@@ -378,9 +341,7 @@ function ObjDetail {
         }
     }
 
-    #$properties = $object.psobject.Properties | Where-Object { $_.Name -notin $ExcludeProperty }
-    #$properties = $object.psobject.Properties | Where-Object { -not ($_ | FilterPredicate -Filter $ExcludeProperty) }
-    $properties = $object.psobject.Properties | Where-Object { $_ | IncludeExcludeFilter -Include $IncludeProperty -Exclude $ExcludeProperty }
+    $properties = $object.psobject.Properties | Where-Object { $_ | IncludeExcludePredicate -Include $IncludeProperty -Exclude $ExcludeProperty }
     foreach ($prop in $properties) {
         $index = $prop.Name
         $value = $prop.Value
@@ -391,9 +352,7 @@ function ObjDetail {
 
     if ($DebugPreference) {
         #Write-Verbose "$cmdName, ExcludedProperty: $Name"
-        #$propertiesExcluded = $object.psobject.Properties | Where-Object { $_.Name -in $ExcludeProperty }
-        #$propertiesExcluded = $object.psobject.Properties | Where-Object { ($_ | FilterPredicate -Filter $ExcludeProperty) }
-        $propertiesExcluded = $object.psobject.Properties | Where-Object { $_ | IncludeExcludeFilter -Include $IncludeProperty -Exclude $ExcludeProperty }
+        $propertiesExcluded = $object.psobject.Properties | Where-Object { $_ | IncludeExcludePredicate -Include $IncludeProperty -Exclude $ExcludeProperty }
         foreach ($prop in $propertiesExcluded) {
             $index = $prop.Name
             $value = $prop.Value
@@ -416,9 +375,12 @@ function Get-ObjectDetail {
         [int]$Depth = 10,
         
         [string[]]$IncludeProperty,
+        
         [string[]]$ExcludeProperty,
 
-        #todo: [string[]]$IncludeType,
+        [AllowEmptyString()]
+        [string[]]$IncludeType,
+        
         [AllowEmptyString()]
         [string[]]$ExcludeType = ('System.Reflection.*', 'System.RunTime*')
     )
@@ -442,5 +404,5 @@ function Get-ObjectDetail {
 
 New-Alias -Name god -Value Get-ObjectDetail -ErrorAction SilentlyContinue
 
-#only export functions with dashes
+#only export functions with dashes, the others are internal functions
 #Export-ModuleMember '*-*'

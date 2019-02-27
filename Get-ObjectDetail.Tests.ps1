@@ -255,10 +255,42 @@ Describe 'FilterPredicate (help function)' {
 }
 
 
-Describe 'IncludeType/ExcludeType' {
+Describe 'IsIgnoredType' {
     Context 'Given string array with wildcards' {
-        It 'todo: tests' {
+        It -Skip 'todo: tests' {
             $false | Should Be $true
+        }
+    }
+
+    Context 'Given missing (null) IncludeType and ExcludeType' {
+        It 'Returns False for all' {
+            #includetype missing = include all
+            #excludetype missing = exclude none
+            IsIgnoredType -InputObject $null -IncludeType $null -ExcludeType $null | Should Be $false
+            IsIgnoredType -InputObject '' -IncludeType $null -ExcludeType $null | Should Be $false
+            IsIgnoredType -InputObject 'hello world' -IncludeType $null -ExcludeType $null | Should Be $false
+        }
+    }
+
+    Context 'Given ExcludeType' {
+        It 'Returns True for excluded types, False for others' {
+            IsIgnoredType -InputObject 'hello world' -IncludeType $null -ExcludeType 'System.String' | Should Be $true
+            
+            IsIgnoredType -InputObject 42 -IncludeType $null -ExcludeType 'System.String' | Should Be $false
+        }
+    }
+
+    Context 'Given IncludeType' {
+        It 'Returns False for included types, True for others' {
+            IsIgnoredType -InputObject 'hello world' -IncludeType 'System.String' -ExcludeType $null | Should Be $false
+            
+            IsIgnoredType -InputObject 42 -IncludeType 'System.String' -ExcludeType $null | Should Be $true
+        }
+    }
+
+    Context 'Given wildcard ExcludeType and one IncludeType that overrides' {
+        It 'Returns False' {
+            IsIgnoredType -InputObject 'hello world' -IncludeType 'System.Str*' -ExcludeType 'System.*' | Should Be $false
         }
     }
 }
@@ -266,7 +298,7 @@ Describe 'IncludeType/ExcludeType' {
 Describe 'IncludeExcludePredicate' {
     Context 'Given -Include and -Exclude wildcard array filters' {
         It 'Returns True for strings matching Include but not Exclude' {
-            ('inc'   | IncludeExcludePredicate -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $true
+            ('incl'  | IncludeExcludePredicate -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $true
             ('bash'  | IncludeExcludePredicate -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $true
             ('cash'  | IncludeExcludePredicate -Include 'in*', '*as*' -Exclude 'as*', '*as') | Should Be $true
 
@@ -297,6 +329,9 @@ Describe 'IncludeExcludePredicate' {
         It 'Returns true for all strings' {
             (''        | IncludeExcludePredicate -Include $null) | Should Be $true
             ('truce'   | IncludeExcludePredicate -Include $null) | Should Be $true
+
+            (''        | IncludeExcludePredicate) | Should Be $true
+            ('truce'   | IncludeExcludePredicate) | Should Be $true
        }
     }
 

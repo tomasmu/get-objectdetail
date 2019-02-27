@@ -90,6 +90,7 @@ function IsSimple {
 }
 #>
 
+#helper helper function
 function FilterPredicate {
     [CmdletBinding()]
     param(
@@ -160,8 +161,8 @@ function IsIgnoredType {
         [string[]]$ExcludeType
     )
 
-    $null -ne $InputObject -and
-    -not ($InputObject.GetType() | IncludeExcludePredicate -Exclude $ExcludeType)
+    ($null -ne $InputObject) -and
+    -not ($InputObject.GetType() | IncludeExcludePredicate -Include $IncludeType -Exclude $ExcludeType)
 }
 
 #determine if string ends with a property cycle repeated $Count times, to avoid infinitely recursive types
